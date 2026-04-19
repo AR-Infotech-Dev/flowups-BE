@@ -1,0 +1,51 @@
+import express from "express";
+import cors from "cors";
+import morgan from "morgan";
+import session from "express-session";
+import cookieParser from "cookie-parser";
+import path from "path";
+import routes from "./routes/index.js";
+// import {routes} from "./routes"
+// const routes = require('./routes');
+import { fileURLToPath } from "url";
+import { env } from "./config/env.js";
+import { legacyConfig } from "./config/legacy.js";
+import { notFoundHandler } from "./middlewares/notFound.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(cors({ origin: true, credentials: true }));
+app.use(morgan("dev"));
+app.use(cookieParser());
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use(
+  session({
+    name: "webtrix.sid",
+    secret: env.sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: false,
+      maxAge: 2 * 60 * 60 * 1000
+    }
+  })
+);
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    app: env.appName,
+    legacyRoot: legacyConfig.legacyRoot,
+    migratedControllers: ["login"]
+  });
+});
+app.use("/uploads", express.static(path.resolve(__dirname, "..", "..", legacyConfig.uploadsDir)));
+app.use('/api/v1/',routes);
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+export default app;
