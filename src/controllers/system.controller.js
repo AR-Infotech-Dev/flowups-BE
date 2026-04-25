@@ -176,62 +176,178 @@ export const getFreeTextSearch = async (req, res) => {
 // ======================================================
 // GET SLUG LIST
 // ======================================================
+// export const getslugList = async (req, res) => {
+//     try {
+//         const { slug, status, category_id } = req.body;
+
+//         const where = {};
+//         const join = [];
+//         const other = { orderBy: "categories_index", order: "ASC" };
+
+//         if (status) {
+//             const statusStr = String(status).split(",").join('","');
+//             where["t.status"] = `IN ("${statusStr}")`;
+//         }
+
+//         if (slug) {
+//             const slugStr = String(slug).split(",").join('","');
+//             where["t.slug"] = `IN ("${slugStr}")`;
+//         }
+
+//         if (category_id) {
+//             const categoryStr = String(category_id).split(",").join('","');
+//             where["t.category_id"] = `IN ("${categoryStr}")`;
+//         }
+
+//         const categoryDetails = await CommonModel.GetMasterListDetails({select="category_id,slug,categoryName,parent_id,is_parent,categories_index", table="categories", where, values=[],limit= "", join, other});
+
+//         for (const row of categoryDetails) {
+//             const childWhere = {
+//                 "t.parent_id": `= "${row.category_id}"`,
+//                 "t.status": `IN ("active")`,
+//             };
+
+//             row.sublist = await CommonModel.GetMasterListDetails("category_id,slug,categoryName,parent_id,is_parent,categories_index,cat_color", "categories", childWhere, "", "", join, other);
+//         }
+
+//         if (categoryDetails.length) {
+//             return successResponse(res, {
+//                 code: 1004,
+//                 httpStatus: 200,
+//                 data: {
+//                     data: categoryDetails
+//                 },
+//             });
+//         }
+
+//         return failureResponse(res, {
+//             code: 2004,
+//             httpStatus: 404,
+//             message: "No records found",
+//         });
+//     } catch (error) {
+//         console.log(error);
+
+//         return failureResponse(res, {
+//             code: 2008,
+//             httpStatus: 500,
+//             message: error.message,
+//         });
+//     }
+// };
+
 export const getslugList = async (req, res) => {
-    try {
-        const { slug, status, category_id } = req.body;
+  try {
+    const { slug = "", status = "", category_id = "" } = req.body;
 
-        const where = {};
-        const join = [];
-        const other = { orderBy: "categories_index", order: "ASC" };
+    const where = [];
+    const values = [];
+    const join = [];
 
-        if (status) {
-            const statusStr = String(status).split(",").join('","');
-            where["t.status"] = `IN ("${statusStr}")`;
-        }
+    const other = {
+      orderBy: "t.categories_index",
+      order: "ASC",
+    };
 
-        if (slug) {
-            const slugStr = String(slug).split(",").join('","');
-            where["t.slug"] = `IN ("${slugStr}")`;
-        }
+    // ===============================
+    // STATUS FILTER
+    // ===============================
+    if (status) {
+      const statusArr = String(status).split(",");
 
-        if (category_id) {
-            const categoryStr = String(category_id).split(",").join('","');
-            where["t.category_id"] = `IN ("${categoryStr}")`;
-        }
+      where.push(
+        `t.status IN (${statusArr.map(() => "?").join(",")})`
+      );
 
-        const categoryDetails = await CommonModel.GetMasterListDetails("category_id,slug,categoryName,parent_id,is_parent,categories_index", "categories", where, "", "", join, other);
+      values.push(...statusArr);
+    }
 
-        for (const row of categoryDetails) {
-            const childWhere = {
-                "t.parent_id": `= "${row.category_id}"`,
-                "t.status": `IN ("active")`,
-            };
+    // ===============================
+    // SLUG FILTER
+    // ===============================
+    if (slug) {
+      const slugArr = String(slug).split(",");
 
-            row.sublist = await CommonModel.GetMasterListDetails("category_id,slug,categoryName,parent_id,is_parent,categories_index,cat_color", "categories", childWhere, "", "", join, other);
-        }
+      where.push(
+        `t.slug IN (${slugArr.map(() => "?").join(",")})`
+      );
 
-        if (categoryDetails.length) {
-            return successResponse(res, {
-                code: 1004,
-                httpStatus: 200,
-                data: {
-                    data: categoryDetails
-                },
-            });
-        }
+      values.push(...slugArr);
+    }
 
-        return failureResponse(res, {
-            code: 2004,
-            httpStatus: 404,
-            message: "No records found",
-        });
-    } catch (error) {
-        console.log(error);
+    // ===============================
+    // CATEGORY ID FILTER
+    // ===============================
+    if (category_id) {
+      const catArr = String(category_id).split(",");
 
-        return failureResponse(res, {
-            code: 2008,
-            httpStatus: 500,
-            message: error.message,
+      where.push(
+        `t.category_id IN (${catArr.map(() => "?").join(",")})`
+      );
+
+      values.push(...catArr);
+    }
+
+    // ===============================
+    // MAIN CATEGORY LIST
+    // ===============================
+    const categoryDetails =
+      await CommonModel.GetMasterListDetails({
+        select:
+          "t.category_id,t.slug,t.categoryName,t.parent_id,t.is_parent,t.categories_index",
+        table: "categories",
+        where,
+        values,
+        join,
+        other,
+      });
+
+    // ===============================
+    // CHILD CATEGORY LIST
+    // ===============================
+    for (const row of categoryDetails) {
+      row.sublist =
+        await CommonModel.GetMasterListDetails({
+          select:
+            "t.category_id,t.slug,t.categoryName,t.parent_id,t.is_parent,t.categories_index,t.cat_color",
+          table: "categories",
+          where: [
+            "t.parent_id = ?",
+            "t.status = ?",
+          ],
+          values: [
+            row.category_id,
+            "active",
+          ],
+          join,
+          other,
         });
     }
+
+    // ===============================
+    // RESPONSE
+    // ===============================
+    if (categoryDetails.length) {
+      return successResponse(res, {
+        code: 1004,
+        httpStatus: 200,
+        data: {data : categoryDetails},
+      });
+    }
+
+    return failureResponse(res, {
+      code: 2004,
+      httpStatus: 404,
+      message: "No records found",
+    });
+
+  } catch (error) {
+    console.log(error);
+
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
 };

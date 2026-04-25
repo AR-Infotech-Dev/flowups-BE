@@ -1,14 +1,28 @@
 
 import express from 'express';
 
-const menuController = require('@controllers/menus.controller');
+import {
+    list,
+    details,
+    create,
+    update,
+    remove,
+    getMenuList,
+    updatePositions
+} from '../controllers/menus.controller.js';
 
 const menuRoutes = express.Router();
 
-menuRoutes.post('/', menuController.menuList);
-menuRoutes.post('/create', menuController.createMenu);
-menuRoutes.post('/edit/:id', menuController.updateMenu);
-menuRoutes.post('/delete', menuController.deleteMenus);
-menuRoutes.post('/delete/:id', menuController.deleteMenu);
+// menuRoutes.get('/getMenuList', menuController.getMenuList);
+
+// Get list with filters / pagination
+menuRoutes.post("/", list);
+menuRoutes.get("/getMenuList", getMenuList);
+menuRoutes.put("/create", create);
+menuRoutes.post("/updatePositions", updatePositions);
+
+menuRoutes.get("/:id", details);
+menuRoutes.post("/:id", update);
+menuRoutes.delete("/:id", remove);
 
 export default menuRoutes;

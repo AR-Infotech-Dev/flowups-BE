@@ -11,7 +11,7 @@ export const env = {
   dbHost: process.env.DB_HOST || "localhost",
   dbPort: Number(process.env.DB_PORT || 3306),
   dbUser: process.env.DB_USER || "root",
-  dbPassword: process.env.DB_PASSWORD || "",
+  dbPassword: process.env.DB_PASSWORD || "root",
   dbName: process.env.DB_NAME || "ticket_management",
   dbPrefix: process.env.DB_PREFIX || "ab_",
   perPage: process.env.PER_PAGE || 10,

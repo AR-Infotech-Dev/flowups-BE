@@ -6,6 +6,11 @@ import { query, DB_PREFIX } from "../config/database.js";
 export const getLastInsertedID = (result) => {
     return result?.insertId || 0;
 };
+export const getNextID = async (table = "",primary_key="") => {
+    let sql = `SELECT IFNULL(MAX(${primary_key}), 0) + 1 AS next_id FROM ${DB_PREFIX}${table};`;
+    const result = await query(sql);
+    return result[0].next_id;
+};
 
 // =====================================
 // GET COUNT BY PARAMETER
@@ -219,6 +224,7 @@ export const getCountsByParameter = async ({ table = "", where = [], values = []
     if (whereParts.length) {
         sql += ` WHERE ${whereParts.join(" AND ")}`;
     }
+
     const rows = await query(sql, params);
     return rows[0]?.total || 0;
 };
@@ -337,6 +343,7 @@ export const getCountsByParameter = async ({ table = "", where = [], values = []
 // };
 export const GetMasterListDetails = async ({ select = "*", table = "", where = [], values = [], limit = "", start = "", join = [], other = {} } = {}) => {
     let sql = `SELECT ${select} FROM ${DB_PREFIX}${table} t`;
+
     const params = [...values];
     // JOIN
     if (join.length) {
@@ -375,11 +382,20 @@ export const GetMasterListDetails = async ({ select = "*", table = "", where = [
     if (other.orderBy) {
         sql += ` ORDER BY ${other.orderBy} ${other.order || "ASC"}`;
     }
+
     // LIMIT
-    if (limit !== "") {
-        sql += ` LIMIT ? OFFSET ?`;
-        params.push(Number(limit), Number(start || 0));
-    }
+    // if (limit !== "") {
+        if (limit !== "") {
+            const safeLimit = Number(limit) || 10;
+            const safeStart = Number(start) || 0;
+
+            sql += ` LIMIT ${safeLimit} OFFSET ${safeStart}`;
+        }
+    //     sql += ` LIMIT ? OFFSET ?`;
+    //     params.push(Number(limit), Number(start || 0));
+    // }
+    console.log(params);
+
     const rows = await query(sql, params);
     return rows;
 };
@@ -438,6 +454,7 @@ export const updateMasterDetails = async ({ table = "", data = {}, where = {} } 
     });
 
     const sql = `UPDATE ${DB_PREFIX}${table} SET ${setParts.join(", ")} WHERE ${whereParts.join(" AND ")}`;
+
     const result = await query(sql, values);
     return result;
 };
