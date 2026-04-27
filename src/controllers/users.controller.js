@@ -235,6 +235,8 @@ import * as CommonModel from "../models/common.model.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { prepareFilterData } from "../utils/filter.builder.js";
 import { validate } from "../utils/request.validator.js";
+import { toMysqlDateTime } from "../utils/dateTime.js";
+import { buildTablePayload } from "../utils/tablePayload.js";
 import Joi from "joi";
 
 const MODULE_TABLE = "admin";
@@ -352,7 +354,7 @@ export const list = async (req, res) => {
     const other1 = {
       orderBy,
       order,
-      searchColumns: ["name", "userName", "email"],
+      searchColumns: ["ad.name","am.name", "r.roleName", 't.userName',"t.email"],
     };
 
     const filterData = prepareFilterData({
@@ -433,7 +435,7 @@ export const getAdminDetails = async (req, res) => {
   try {
     const method = req.method.toUpperCase();
     const { id: adminID = null } = req.params;
-    const body = req.body;
+    const body = await buildTablePayload(MODULE_TABLE, req.body);
 
     let data = {};
 
@@ -463,8 +465,11 @@ export const getAdminDetails = async (req, res) => {
 
     switch (method) {
       case "PUT": {
-        data.created_by = req.user.adminID;
-        data.created_date = new Date();
+        data = await buildTablePayload(MODULE_TABLE, {
+          ...data,
+          created_by: req.user.adminID,
+          created_date: toMysqlDateTime(),
+        });
 
         const result = await CommonModel.saveMasterDetails({
           table: MODULE_TABLE,
@@ -488,8 +493,11 @@ export const getAdminDetails = async (req, res) => {
           });
         }
 
-        data.modified_by = req.user.adminID;
-        data.modified_date = new Date();
+        data = await buildTablePayload(MODULE_TABLE, {
+          ...data,
+          modified_by: req.user.adminID,
+          modified_date: toMysqlDateTime(),
+        });
 
         await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,

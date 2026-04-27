@@ -6,6 +6,7 @@ import usersRoutes from "./user.routes.js";
 import menuRoutes from "./menu.routes.js";
 import ticketRoutes from "./ticket.routes.js";
 import commentsRoutes from "./comments.routes.js";
+import categoryRoutes from "./category.routes.js";
 
 import {verifyToken} from "../middlewares/auth.middleware.js"
 
@@ -16,6 +17,7 @@ router.use('/',verifyToken, commentsRoutes);
 router.use('/users',verifyToken, usersRoutes);
 router.use('/system',verifyToken, systemRoutes);
 router.use('/menus',verifyToken, menuRoutes);
+router.use('/categories',verifyToken, categoryRoutes);
 router.use('/tickets',verifyToken, ticketRoutes);
 
 export default router;

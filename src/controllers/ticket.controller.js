@@ -2,6 +2,8 @@ import * as CommonModel from "../models/common.model.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { prepareFilterData } from "../utils/filter.builder.js";
 import { validate } from "../utils/request.validator.js";
+import { toMysqlDateTime } from "../utils/dateTime.js";
+import { buildTablePayload } from "../utils/tablePayload.js";
 import Joi from 'joi';
 
 const MODULE_TABLE = "tickets"
@@ -34,7 +36,7 @@ const ticketSchema = Joi.object({
 // LIST USERS
 // ======================================================
 const default_columns = {
-    ticket_priority: { table: "categories", alias: "cat", column: "categoryName", key2: "category_id", select: "" },
+    ticket_priority: { table: "categories", alias: "cat", column: "categoryName", key2: "category_id", select: "cat.cat_color AS priority_color" },
     ticket_status: { table: "categories", alias: "ca", column: "categoryName", key2: "category_id", select: "ca.cat_color AS status_color" },
     query_type: { table: "categories", alias: "ct", column: "categoryName", key2: "category_id", select: "ct.cat_color AS type_color" },
     assignee: { table: "admin", alias: "a", column: "name", key2: "adminID", select: "" },
@@ -58,7 +60,7 @@ export const list = async (req, res) => {
         // const wherec = {};
         // const join = [];
         // const other = { orderBy, order , searchText, freeTextSearch ,  };
-        const other1 = { orderBy: 'ticket_id', order: 'DESC', searchColumns: ['name', 'userName', 'email'] };
+        const other1 = { orderBy: 'ticket_id', order: 'DESC', searchColumns: ['t.ticket_no','cat.categoryName','ca.categoryName','ct.categoryName', 'a.name', 'cs.name' , 'ad.name', 'am.name'] };
         const filterData = prepareFilterData({ filters, searchText, other: other1, default_columns, custom_columns })
         const { select, where, values, join, other } = filterData;
 
@@ -110,7 +112,7 @@ export const getTicketDetails = async (req, res) => {
     try {
         const method = req.method.toUpperCase();
         const { id: ticket_id = null } = req.params;
-        const body = req.body
+        const body = await buildTablePayload(MODULE_TABLE, req.body);
         let data = {};
         if (method != 'GET') {
             const result = validate(ticketSchema, body);
@@ -128,10 +130,12 @@ export const getTicketDetails = async (req, res) => {
             case "PUT": {
                 const next_id = await CommonModel.getNextID(MODULE_TABLE, 'ticket_id');
 
-                data['created_by'] = req.user.adminID;
-                data['created_date'] = new Date();
-
-                data['ticket_no'] = `TKT-${next_id}`;
+                data = await buildTablePayload(MODULE_TABLE, {
+                    ...data,
+                    created_by: req.user.adminID,
+                    created_date: toMysqlDateTime(),
+                    ticket_no: `TKT-${next_id}`,
+                });
 
                 const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data: data });
                 return successResponse(res, {
@@ -151,8 +155,11 @@ export const getTicketDetails = async (req, res) => {
                     });
                 }
 
-                data['modified_by'] = req.user.adminID;
-                data['modified_date'] = new Date();
+                data = await buildTablePayload(MODULE_TABLE, {
+                    ...data,
+                    modified_by: req.user.adminID,
+                    modified_date: toMysqlDateTime(),
+                });
 
                 await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data, where: { ticket_id } });
 
