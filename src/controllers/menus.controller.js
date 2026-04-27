@@ -1,5 +1,7 @@
 import * as CommonModel from "../models/common.model.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
+import { toMysqlDateTime } from "../utils/dateTime.js";
+import { buildTablePayload } from "../utils/tablePayload.js";
 
 // =====================================
 // GET MENU LIST
@@ -252,14 +254,14 @@ export const create = async (req, res) => {
   try {
     const { SadminID = 1, custom_module = "no", } = req.body;
 
-    const data = {
+    const menuPayload = {
       ...req.body,
       created_by: SadminID,
-      created_date: new Date(),
+      created_date: toMysqlDateTime(),
     };
 
     if (custom_module !== "yes") {
-      data.module_name = String(data.module_name || "")
+      menuPayload.module_name = String(menuPayload.module_name || "")
         .trim()
         .toLowerCase()
         .replaceAll(
@@ -267,11 +269,13 @@ export const create = async (req, res) => {
           "_"
         );
 
-      data.menuLink = data.module_name;
-      if (!data.table_name) {
-        data.table_name = data.module_name;
+      menuPayload.menuLink = menuPayload.module_name;
+      if (!menuPayload.table_name) {
+        menuPayload.table_name = menuPayload.module_name;
       }
     }
+
+    const data = await buildTablePayload("menu_master", menuPayload);
 
     const result = await CommonModel.saveMasterDetails({ table: "menu_master", data, });
 
@@ -303,11 +307,11 @@ export const update = async (req, res) => {
     const { id } = req.params;
     const { SadminID = 1, } = req.body;
 
-    const data = {
+    const data = await buildTablePayload("menu_master", {
       ...req.body,
       modified_by: SadminID,
-      modified_date: new Date(),
-    };
+      modified_date: toMysqlDateTime(),
+    });
 
     await CommonModel.updateMasterDetails({ table: "menu_master", data, where: { menuID: id, }, });
 

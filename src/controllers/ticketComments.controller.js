@@ -1,6 +1,8 @@
 import * as CommonModel from "../models/common.model.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { prepareFilterData } from "../utils/filter.builder.js";
+import { toMysqlDateTime } from "../utils/dateTime.js";
+import { buildTablePayload } from "../utils/tablePayload.js";
 
 const MODULE_TABLE = "tickets_comments";
 
@@ -106,13 +108,13 @@ export const getTicketCommentDetails = async (req, res) => {
                     });
                 }
 
-                data = {
+                data = await buildTablePayload(MODULE_TABLE, {
                     ticket_id,
                     record_type,
                     user_id: req.body.user_id || req.user.adminID,
                     comment_text: comment,
-                    created_date: new Date(),
-                };
+                    created_date: toMysqlDateTime(),
+                });
 
                 const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data });
 
@@ -142,11 +144,11 @@ export const getTicketCommentDetails = async (req, res) => {
                     });
                 }
 
-                data = {
+                data = await buildTablePayload(MODULE_TABLE, {
                     comment_text: comment,
                     modified_by: req.user.adminID,
-                    modified_date: new Date(),
-                };
+                    modified_date: toMysqlDateTime(),
+                });
 
                 const result = await CommonModel.updateMasterDetails({
                     table: MODULE_TABLE,

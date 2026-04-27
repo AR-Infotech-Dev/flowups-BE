@@ -1,4 +1,4 @@
-export const prepareFilterData = ({ filters = [], searchText = "", other = { orderBy: 'created_by', order: 'ASC', searchColumns: [] }, default_columns = {}, custom_columns = {} ,isDefault="no"} = {}) => {
+export const prepareFilterData = ({ filters = [], searchText = "", other = { orderBy: 'created_by', order: 'ASC', searchColumns: [] }, default_columns = {}, custom_columns = {}, isDefault = "no" } = {}) => {
 
     const where = [];
     const values = [];
@@ -162,18 +162,18 @@ export const prepareFilterData = ({ filters = [], searchText = "", other = { ord
     // // ===============================
     // // FREE TEXT SEARCH
     // // ===============================
-    // if (searchText) {
-    //     other.searchColumns.forEach(col => {
+    if (searchText) {
+        const searchCols = other.searchColumns || [];
 
-    //     });
-    //     where.push(`( t.name LIKE ? OR t.userName LIKE ? OR t.email LIKE ? )`);
-    //     values.push(
-    //         `%${searchText}%`,
-    //         `%${searchText}%`,
-    //         `%${searchText}%`
-    //     );
-    // }
-    
+        if (searchCols.length) {
+            const conditions = searchCols.map((col) => `${col} LIKE ?`);
+            where.push(`(${conditions.join(" OR ")})`);
+            searchCols.forEach(() => {
+                values.push(`%${searchText}%`);
+            });
+        }
+    }
+
     return {
         select,
         where,
