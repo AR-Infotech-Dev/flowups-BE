@@ -343,7 +343,6 @@ export const getCountsByParameter = async ({ table = "", where = [], values = []
 // };
 export const GetMasterListDetails = async ({ select = "*", table = "", where = [], values = [], limit = "", start = "", join = [], other = {} } = {}) => {
     let sql = `SELECT ${select} FROM ${DB_PREFIX}${table} t`;
-
     const params = [...values];
     // JOIN
     if (join.length) {
@@ -384,18 +383,12 @@ export const GetMasterListDetails = async ({ select = "*", table = "", where = [
     }
 
     // LIMIT
-    // if (limit !== "") {
-        if (limit !== "") {
-            const safeLimit = Number(limit) || 10;
-            const safeStart = Number(start) || 0;
+    if (limit !== "") {
+        const safeLimit = Number(limit) || 10;
+        const safeStart = Number(start) || 0;
 
-            sql += ` LIMIT ${safeLimit} OFFSET ${safeStart}`;
-        }
-    //     sql += ` LIMIT ? OFFSET ?`;
-    //     params.push(Number(limit), Number(start || 0));
-    // }
-    console.log(params);
-
+        sql += ` LIMIT ${safeLimit} OFFSET ${safeStart}`;
+    }
     const rows = await query(sql, params);
     return rows;
 };
