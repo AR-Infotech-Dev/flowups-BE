@@ -20,7 +20,7 @@ export const getTableColumns = async (table = "") => {
 export const buildTablePayload = async (table = "", source = {}) => {
   const allowedColumns = await getTableColumns(table);
   const data = {};
-
+  
   for (const column of allowedColumns) {
     if (Object.prototype.hasOwnProperty.call(source, column) && source[column] !== undefined) {
       data[column] = source[column];

@@ -13,7 +13,9 @@ export function getDbPool() {
       database: env.dbName,
       waitForConnections: true,
       connectionLimit: 10,
-      namedPlaceholders: true
+      namedPlaceholders: true,
+      timezone: '+05:30',
+      dateStrings: true
     });
   }
 

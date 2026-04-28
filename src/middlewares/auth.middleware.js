@@ -2,7 +2,7 @@ import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { failureResponse } from "../utils/apiResponse.js";
 
-export const verifyToken = (req, res, next) => {
+export const verifyToken = (req, res, next) => {    
     try {
         const authHeader = req.headers.authorization || "";
         if (!authHeader.startsWith("Bearer ")) {

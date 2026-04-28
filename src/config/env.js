@@ -3,11 +3,11 @@ import dotenv from "dotenv";
 dotenv.config();
 
 export const env = {
-  
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 3000),
-  appName: process.env.APP_NAME || "flowupS",
+  appName: process.env.APP_NAME || "flowupS CallDesk",
   appUrl: process.env.APP_URL || "http://localhost:3000",
+  logoUrl: process.env.APP_URL || "http://localhost:3000",
   sessionSecret: process.env.SESSION_SECRET || "change-me",
   dbHost: process.env.DB_HOST || "localhost",
   dbPort: Number(process.env.DB_PORT || 3306),
@@ -22,6 +22,9 @@ export const env = {
   legacyTimezone: process.env.LEGACY_TIMEZONE || "Asia/Kolkata",
   legacyEncryptionKey: process.env.LEGACY_ENCRYPTION_KEY || "KFjfdJFNBBKIRMICdkf45",
   jwtSecret: process.env.JWT_SECRET || "1132e486f42b1f714fae447fcdab07f1ea819b4f7b997864c8b5f4869e148811",
-  jwtExpire: process.env.JWT_EXPIRE || "1d"
+  jwtExpire: process.env.JWT_EXPIRE || "1d",
+
+  EMAIL_USER: process.env.EMAIL_USER || "ranjitambare7@gmail.com",
+  EMAIL_PASS: process.env.EMAIL_PASS || "kxqw bais cktp nvrl",
 };
 
