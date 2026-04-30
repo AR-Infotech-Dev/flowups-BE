@@ -111,21 +111,21 @@ export const getTicketDetails = async (req, res) => {
                 console.log('data.created_by, ty :',typeof data.created_by);
                 console.log('data.created_by, :', data.created_by);
                 
-                if (data.assignee && Number(data.assignee) !== Number(data.created_by)) {
-                    emitNotification(data.assignee, {
-                        "title": "New Ticket Assigned created",
-                        "body": `Ticket #${data.ticket_no} has been assigned to you.`
-                    });
-                }
+                // if (data.assignee && Number(data.assignee) !== Number(data.created_by)) {
+                //     emitNotification(data.assignee, {
+                //         "title": "New Ticket Assigned created",
+                //         "body": `Ticket #${data.ticket_no} has been assigned to you.`
+                //     });
+                // }
 
-                await sendEmailToClient(res, result.insertId, 'Your Call is Registered', 'Your support ticket has been successfully created. Our team will review it shortly.')
-                return successResponse(res, {
-                    code: 1001,
-                    httpStatus: 201,
-                    data: {
-                        insertId: result.insertId,
-                    },
-                });
+                // await sendEmailToClient(res, result.insertId, 'Your Call is Registered', 'Your support ticket has been successfully created. Our team will review it shortly.')
+                // return successResponse(res, {
+                //     code: 1001,
+                //     httpStatus: 201,
+                //     data: {
+                //         insertId: result.insertId,
+                //     },
+                // });
             }
 
             case "POST": {
@@ -142,70 +142,70 @@ export const getTicketDetails = async (req, res) => {
                     modified_date: toMysqlDateTime(),
                 });
 
-                const old_details = await CommonModel.getMasterDetails(MODULE_TABLE, "assignee AS old_assignee, ticket_status AS old_ticket_status,due_date as old_due_date", { ticket_id });
-                const old_assignee = old_details?.length > 0 ? old_details[0]?.old_assignee : null;
-                const old_ticket_status = old_details?.length > 0 ? old_details[0]?.old_ticket_status : null;
-                const old_due_date = old_details?.length > 0 ? old_details[0]?.old_due_date : null;
+                // const old_details = await CommonModel.getMasterDetails(MODULE_TABLE, "assignee AS old_assignee, ticket_status AS old_ticket_status,due_date as old_due_date", { ticket_id });
+                // const old_assignee = old_details?.length > 0 ? old_details[0]?.old_assignee : null;
+                // const old_ticket_status = old_details?.length > 0 ? old_details[0]?.old_ticket_status : null;
+                // const old_due_date = old_details?.length > 0 ? old_details[0]?.old_due_date : null;
 
                 await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data, where: { ticket_id }, });
 
-                const modifiedByName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.modified_by })
-                const assigneeName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.assignee });
+                // const modifiedByName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.modified_by })
+                // const assigneeName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.assignee });
                 
-                // Assignee changed
-                if (data?.assignee && Number(old_assignee) !== Number(data.assignee)) {
-                    emitNotification(data.assignee, {
-                        "title": 'New Ticket Assigned',
-                        "body": `Ticket #${data.ticket_no} has been assigned to you by ${modifiedByName?.name || '-'}.`
-                    });
-                    if (Number(data.assignee) != Number(data.created_by)) {
-                        emitNotification(data.created_by, {
-                            "title": "New Ticket Assigned aniket",
-                            "body": `Ticket #${data.ticket_no} has been assigned to ${assigneeName?.name || '-'}. created by you`
-                        });
-                    }
+                // // Assignee changed
+                // if (data?.assignee && Number(old_assignee) !== Number(data.assignee)) {
+                //     emitNotification(data.assignee, {
+                //         "title": 'New Ticket Assigned',
+                //         "body": `Ticket #${data.ticket_no} has been assigned to you by ${modifiedByName?.name || '-'}.`
+                //     });
+                //     if (Number(data.assignee) != Number(data.created_by)) {
+                //         emitNotification(data.created_by, {
+                //             "title": "New Ticket Assigned aniket",
+                //             "body": `Ticket #${data.ticket_no} has been assigned to ${assigneeName?.name || '-'}. created by you`
+                //         });
+                //     }
 
-                    await sendEmailToClient(
-                        res,
-                        ticket_id,
-                        "Assignee is Updated",
-                        "We would like to inform you that the service engineer for your support ticket has been updated.",
-                    );
-                }
+                //     await sendEmailToClient(
+                //         res,
+                //         ticket_id,
+                //         "Assignee is Updated",
+                //         "We would like to inform you that the service engineer for your support ticket has been updated.",
+                //     );
+                // }
 
-                // Ticket closed
-                if (data?.ticket_status && old_ticket_status !== data.ticket_status && data.ticket_status === TICKET_STATUS_CLOSE) {
-                    const feedback_token = createFeedbackToken();
-                    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { feedback_token }, where: { ticket_id }, });
-                    const feedback_url = `${env.appFEUrl}/feedback/${ticket_id}/${feedback_token}`;
+                // // Ticket closed
+                // if (data?.ticket_status && old_ticket_status !== data.ticket_status && data.ticket_status === TICKET_STATUS_CLOSE) {
+                //     const feedback_token = createFeedbackToken();
+                //     await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { feedback_token }, where: { ticket_id }, });
+                //     const feedback_url = `${env.appFEUrl}/feedback/${ticket_id}/${feedback_token}`;
 
-                    emitNotification(data.created_by, {
-                        "title": "Ticket Closed",
-                        "body": `Your ticket #${data.ticket_no} has been closed by ${modifiedByName?.name || ''}`
-                    });
+                //     emitNotification(data.created_by, {
+                //         "title": "Ticket Closed",
+                //         "body": `Your ticket #${data.ticket_no} has been closed by ${modifiedByName?.name || ''}`
+                //     });
 
-                    await sendEmailToClient(
-                        res,
-                        ticket_id,
-                        "Ticket is Closed !",
-                        "We would like to inform you that your support ticket has been closed.",
-                        feedback_url
-                    );
-                }
+                //     // await sendEmailToClient(
+                //     //     res,
+                //     //     ticket_id,
+                //     //     "Ticket is Closed !",
+                //     //     "We would like to inform you that your support ticket has been closed.",
+                //     //     feedback_url
+                //     // );
+                // }
 
-                // Ticket closed
-                if (data?.due_date && old_due_date !== data.due_date) {
-                    emitNotification(data.created_by, {
-                        "title": "Ticket Due Date Updated",
-                        "body": `Your ticket #${data.ticket_no} has been change to ${data.due_date}`
-                    });
-                    await sendEmailToClient(
-                        res,
-                        ticket_id,
-                        `Due Date for your service ticket is changed! `,
-                        "We would like to inform you that due date has been changed for your support ticket.",
-                    );
-                }
+                // // Ticket closed
+                // if (data?.due_date && old_due_date !== data.due_date) {
+                //     emitNotification(data.created_by, {
+                //         "title": "Ticket Due Date Updated",
+                //         "body": `Your ticket #${data.ticket_no} has been change to ${data.due_date}`
+                //     });
+                //     await sendEmailToClient(
+                //         res,
+                //         ticket_id,
+                //         `Due Date for your service ticket is changed! `,
+                //         "We would like to inform you that due date has been changed for your support ticket.",
+                //     );
+                // }
 
                 return successResponse(res, {
                     code: 1002,
