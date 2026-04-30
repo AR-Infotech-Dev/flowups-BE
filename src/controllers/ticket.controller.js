@@ -119,13 +119,13 @@ export const getTicketDetails = async (req, res) => {
                 // }
 
                 // await sendEmailToClient(res, result.insertId, 'Your Call is Registered', 'Your support ticket has been successfully created. Our team will review it shortly.')
-                // return successResponse(res, {
-                //     code: 1001,
-                //     httpStatus: 201,
-                //     data: {
-                //         insertId: result.insertId,
-                //     },
-                // });
+                return successResponse(res, {
+                    code: 1001,
+                    httpStatus: 201,
+                    data: {
+                        insertId: result.insertId,
+                    },
+                });
             }
 
             case "POST": {
