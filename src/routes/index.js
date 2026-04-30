@@ -8,12 +8,14 @@ import ticketRoutes from "./ticket.routes.js";
 import commentsRoutes from "./comments.routes.js";
 import categoryRoutes from "./category.routes.js";
 import notificationRoutes from "./notification.routes.js";
+import feedbackRoutes from "./feedback.routes.js";
 
 import {verifyToken} from "../middlewares/auth.middleware.js"
 
 const router = express.Router();
 
 router.use('/', loginRoutes);
+router.use('/',feedbackRoutes);
 router.use('/',verifyToken, commentsRoutes);
 router.use('/users',verifyToken, usersRoutes);
 router.use('/system',verifyToken, systemRoutes);

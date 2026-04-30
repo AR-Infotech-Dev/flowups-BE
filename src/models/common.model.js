@@ -109,6 +109,24 @@ export const getMasterDetails = async (table = "", select = "*", where = {}) => 
 
     return await query(sql, values);
 };
+export const getSpecificDetails = async (table = "", select = "*", where = {}) => {
+    let sql = ` SELECT ${select} FROM ${DB_PREFIX}${table}`;
+
+    const values = [];
+    const conditions = [];
+
+    Object.entries(where).forEach(([key, value]) => {
+        conditions.push(`${key} = ?`);
+        values.push(value);
+    });
+
+    if (conditions.length) {
+        sql += ` WHERE ${conditions.join(" AND ")}`;
+    }
+
+    const result = await query(sql, values);
+    return result ? result[0] : null; 
+};
 
 // // =====================================
 // // INSERT
