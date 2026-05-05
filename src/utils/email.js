@@ -17,7 +17,7 @@ const transporter = nodemailer.createTransport({
 // ================================
 export const sendEmail = async ({ to, subject, html, text = "", }) => {
     try {
-        const info = await transporter.sendMail({ from: `"Support Team" <${env.EMAIL_USER}>`, to, subject, text, html, });
+        const info = await transporter.sendMail({ from: `Support Team <${env.EMAIL_USER}>`, to, subject, text, html, });
         return {
             success: true,
             message: "Email sent successfully",
