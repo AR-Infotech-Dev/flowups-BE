@@ -14,18 +14,13 @@ export const initSocket = (server) => {
     });
 
     io.on("connection", (socket) => {
-        console.log("🔌 User Connected :", socket.id);
-
         /* -----------------------------------------------
            USER ROOM JOIN
         ----------------------------------------------- */
         socket.on("join_room", (userId) => {
             if (!userId) return;
-
             const roomName = `user_${userId}`;
-
             socket.join(roomName);
-
             console.log(`✅ Joined Room : ${roomName}`);
         });
 

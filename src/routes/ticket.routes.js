@@ -8,6 +8,7 @@ ticketRoutes.post('/', ticketController.list);
 ticketRoutes.post('/history', ticketHistoryController.history);
 ticketRoutes.post('/delete', ticketController.changeStatus);
 ticketRoutes.put('/create', ticketController.getTicketDetails);
+ticketRoutes.post('/update-status/:id', ticketController.updateStatus);
 ticketRoutes.get('/:id', ticketController.getTicketDetails);
 ticketRoutes.post('/:id', ticketController.getTicketDetails);
 

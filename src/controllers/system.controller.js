@@ -7,18 +7,18 @@ import { successResponse, failureResponse } from "../utils/apiResponse.js";
 // ======================================================
 export const getDefinations = async (req, res) => {
     try {
-        let { table, menuID } = req.body;
+        let { table, menu_id } = req.body;
 
         if (!table) {
-            if (!menuID) {
+            if (!menu_id) {
                 return failureResponse(res, {
                     code: 2001,
                     httpStatus: 400,
-                    message: "menuID is required",
+                    message: "menu_id is required",
                 });
             }
 
-            const moduleDetails = await CommonModel.getMasterDetails("menu_master", "*", { menuID });
+            const moduleDetails = await CommonModel.getMasterDetails("menu_master", "*", { menu_id });
 
             if (!moduleDetails.length) {
                 return failureResponse(res, {
@@ -147,7 +147,9 @@ export const getFreeTextSearch = async (req, res) => {
       where.push(`t.status = ?`);
       values.push("active");
     }
-
+    if (['customer'].includes(tableName)) {
+      where.push(`t.company_id = ${req.user.company_id} `);
+    }
     const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values});
     if (result.length) {
       return successResponse(res, {
