@@ -174,6 +174,7 @@ export const forgotPassword = async (req, res) => {
       subject: "Forgot Password OTP",
       html: template,
       text: `Your OTP is ${otp}. It will expire in 10 minutes.`,
+      company_id: user.company_id,
     });
 
     if (!success) {
@@ -262,6 +263,7 @@ export const verifyForgotPassword = async (req, res) => {
       subject: "Password Updated Successfully",
       html: template,
       text: "Your password has been updated successfully.",
+      company_id: user.company_id,
     });
 
     if (!success) {

@@ -299,6 +299,7 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
         const { where, values, join, other } = filterData;
         const select = `
             t.ticket_no,
+            t.company_id,
             DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date,
             DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date,
             a.name AS assignedTo,
@@ -326,6 +327,7 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
 
         const details = ticketDetails[0] || {};
         const ticket_no = details.ticket_no || "-";
+        const company_id = details.company_id || null;
         const created_date = details.created_date || "-";
         const due_date = details.due_date || "-";
         const email = details.email || "";
@@ -354,7 +356,7 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
             redirect_url: redirect_url
         });
 
-        const { success, error } = await sendEmail({ to: email, subject: subject || "Ticket Notification", html: template, text: "", });
+        const { success, error } = await sendEmail({ to: email, subject: subject || "Ticket Notification", html: template, text: "", company_id, });
 
         if (!success) {
             return failureResponse(res, {

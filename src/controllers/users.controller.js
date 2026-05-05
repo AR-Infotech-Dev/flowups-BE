@@ -279,6 +279,7 @@ export const getAdminDetails = async (req, res) => {
           subject: "User Login Credentials",
           html: template,
           text: "",
+          company_id: data.company_id || req.user.company_id,
         });
         // console.log('success : ' ,success);
         if (!success) {

@@ -72,9 +72,9 @@ export const list = async (req, res) => {
         order,
         searchColumns: [
           "company_name",
-          "from_email",
+          "sender_email",
           "cc_email",
-          "from_name",
+          "sender_name",
           "mobile_number",
           "pan",
         ],
@@ -87,9 +87,9 @@ export const list = async (req, res) => {
     other.freeTextSearch = searchText;
     other.searchColumns = [
       "t.company_name",
-      "t.from_email",
+      "t.sender_email",
       "t.cc_email",
-      "t.from_name",
+      "t.sender_name",
       "t.mobile_number",
       "t.pan",
     ];
