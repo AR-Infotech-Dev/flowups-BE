@@ -1,184 +1,107 @@
 import * as CommonModel from "../models/common.model.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
+import { prepareFilterData } from "../utils/filter.builder.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
-import { buildTablePayload } from "../utils/tablePayload.js";
+import { validateBody } from "../utils/bodyValidator.js";
 
-// =====================================
-// GET MENU LIST
-// =====================================
-// export const getMenuList = async (req, res) => {
-//   try {
-//     // ===============================
-//     // GET PARENT MENUS
-//     // ===============================
-//     const menuHistory = await CommonModel.GetMasterListDetails({
-//       select: "*",
-//       table: "menu_master",
-//       where: [
-//         "t.status = ?",
-//         "t.isParent = ?"
-//       ],
-//       values: [
-//         "active",
-//         "yes"
-//       ],
-//       other: {
-//         orderBy: "t.menuIndex",
-//         order: "ASC"
-//       }
-//     });
-//     console.log(menuHistory);
+const MODULE_TABLE = "menu_master";
 
-//     // ===============================
-//     // GET SUB MENUS
-//     // ===============================
-//     for (const menu of menuHistory) {
-//       const subMenuHistory = await CommonModel.GetMasterListDetails({
-//         select: "*",
-//         table: "menu_master",
-//         where: [
-//           "t.status = ?",
-//           "t.isParent = ?",
-//           "t.parentID = ?"
-//         ],
-//         values: [
-//           "active",
-//           "no",
-//           menu.menuID
-//         ],
-//         other: {
-//           orderBy: "t.menuIndex",
-//           order: "ASC"
-//         }
-//       });
+const default_columns = {};
 
-//       menu.subMenu = subMenuHistory;
-//     }
+const custom_columns = {
+  created_by: {
+    table: "admin",
+    alias: "ad",
+    column: "name",
+    key2: "adminID",
+  },
+  modified_by: {
+    table: "admin",
+    alias: "am",
+    column: "name",
+    key2: "adminID",
+  },
+};
 
-//     // ===============================
-//     // RESPONSE
-//     // ===============================
-//     if (menuHistory.length) {
-//       return successResponse(res, {
-//         code: 1004,
-//         httpStatus: 200,
-//         data: {
-//           data: menuHistory
-//         },
-//       });
-//     }
+// =============================================
+// VALIDATION
+// =============================================
+const menuValidationRules = {
+  menu_name: { label: "Menu Name", required: true },
+  table_name: { label: "Table Name" },
+  module_name: { label: "Module Name" },
+  menu_link: { label: "Menu Link" },
+  module_description: { label: "Description" },
+  plural_label: { label: "Plural Label" },
+  label: { label: "Label" },
+  icon_name: { label: "Icon" },
+  status: { label: "Status" },
+};
 
-//     return failureResponse(res, {
-//       code: 2004,
-//       httpStatus: 404,
-//       message: "No menu found"
-//     });
-
-//   } catch (error) {
-//     console.log(error);
-
-//     return failureResponse(res, {
-//       code: 2008,
-//       httpStatus: 500,
-//       message: error.message
-//     });
-//   }
-// };
-
-// =====================================================
-// GET MENU DETAILS (LIST + PAGINATION + SUBMENU)
-// =====================================================
+// =============================================
+// LIST MENU
+// =============================================
 export const list = async (req, res) => {
   try {
     const {
       page = 1,
-      getAll = "N",
-      orderBy = "menuIndex",
-      order = "ASC",
       searchText = "",
-      status = "active",
-      show_on_website = "",
+      getAll = "N",
+      orderBy = "created_date",
+      order = "ASC",
+      filters = [],
     } = req.body;
 
     const limit = 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 
-    const where = {};
-    const join = [];
+    const filterData = prepareFilterData({
+      filters,
+      searchText,
+      other: {
+        orderBy,
+        order,
+        searchColumns: ["menuName", "module_name", "menuLink"],
+      },
+      default_columns,
+      custom_columns,
+    });
 
-    const other = {
-      orderBy,
-      order,
-      freeTextSearch: searchText,
-      searchColumns: [
-        "t.menuName",
-        "t.module_name",
-        "t.menuLink",
-      ],
-    };
+    const { select, where, values, join, other } = filterData;
 
-    if (status) {
-      where["t.status = ?"] = status;
-    }
+    const total = await CommonModel.getCountsByParameter({
+      table: MODULE_TABLE,
+      where,
+      values,
+      join,
+      other,
+    });
 
-    if (show_on_website) {
-      where["t.show_on_website = ?"] =
-        show_on_website;
-    }
+    const totalPages = Math.ceil(total / limit);
+    const end = Math.min(start + limit, total);
 
-    if (getAll !== "Y") {
-      where["t.isParent = ?"] = "yes";
-    }
+    let menuList = [];
 
-    const total =
-      await CommonModel.getCountsByParameter({
-        table: "menu_master",
+    if (getAll === "Y") {
+      menuList = await CommonModel.GetMasterListDetails({
+        select,
+        table: MODULE_TABLE,
         where,
+        values,
         join,
         other,
       });
-
-    const totalPages = Math.ceil(
-      total / limit
-    );
-
-    const rows =
-      await CommonModel.GetMasterListDetails({
-        table: "menu_master",
+    } else {
+      menuList = await CommonModel.GetMasterListDetails({
+        select,
+        table: MODULE_TABLE,
         where,
+        values,
+        limit,
+        start,
         join,
         other,
-        limit:
-          getAll === "Y"
-            ? ""
-            : limit,
-        start:
-          getAll === "Y"
-            ? ""
-            : start,
-      });
-
-    const menuData = [];
-
-    for (const row of rows) {
-      const subMenu =
-        await CommonModel.GetMasterListDetails({
-          table: "menu_master",
-          where: {
-            "t.parentID = ?":
-              row.menuID,
-          },
-          other: {
-            orderBy:
-              "menuIndex",
-            order: "ASC",
-          },
-        });
-
-      menuData.push({
-        ...row,
-        subMenu,
       });
     }
 
@@ -186,57 +109,16 @@ export const list = async (req, res) => {
       code: 1004,
       httpStatus: 200,
       data: {
-        data: menuData,
+        data: menuList,
         pagination: {
           total,
-          page:
-            currentPage,
+          page: currentPage,
           limit,
           totalPages,
-          start:
-            total === 0
-              ? 0
-              : start + 1,
-          end: Math.min(
-            start + limit,
-            total
-          ),
+          start: total === 0 ? 0 : start + 1,
+          end,
         },
       },
-    });
-  } catch (error) {
-    console.log(error);
-
-    return failureResponse(res, {
-      code: 2008,
-      httpStatus: 500,
-      message:
-        error.message,
-    });
-  }
-};
-
-// =====================================================
-// GET SINGLE MENU
-// =====================================================
-export const details = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const rows = await CommonModel.GetMasterListDetails({ table: "menu_master", where: { "t.menuID = ?": id, }, });
-
-    if (!rows.length) {
-      return failureResponse(res,
-        {
-          code: 2004,
-          httpStatus: 404,
-          message: "Menu not found",
-        }
-      );
-    }
-
-    return successResponse(res, {
-      data: { data: rows[0] },
     });
   } catch (error) {
     return failureResponse(res, {
@@ -247,213 +129,157 @@ export const details = async (req, res) => {
   }
 };
 
-// =====================================================
-// CREATE MENU
-// =====================================================
-export const create = async (req, res) => {
+// =============================================
+// CREATE / UPDATE / GET SINGLE
+// =============================================
+export const getMenuDetails = async (req, res) => {
   try {
-    const { SadminID = 1, custom_module = "no", } = req.body;
+    const method = req.method.toUpperCase();
+    const { id: menu_id = null } = req.params;
 
-    const menuPayload = {
-      ...req.body,
-      created_by: SadminID,
-      created_date: toMysqlDateTime(),
-    };
+    switch (method) {
 
-    if (custom_module !== "yes") {
-      menuPayload.module_name = String(menuPayload.module_name || "")
-        .trim()
-        .toLowerCase()
-        .replaceAll(
-          " ",
-          "_"
+      // ================= CREATE =================
+      case "PUT": {
+        const validation = validateBody(req.body, menuValidationRules);
+        if (!validation.isValid) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: validation.message,
+          });
+        }
+        const data = validation.data;
+        data.created_by = req.user.adminID;
+        data.created_date = toMysqlDateTime();
+
+        const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data, });
+
+        return successResponse(res, {
+          code: 1001,
+          httpStatus: 201,
+          data: { insertId: result.insertId },
+        });
+      }
+
+      // ================= UPDATE =================
+      case "POST": {
+        if (!menu_id) {
+          return failureResponse(res, {
+            code: 2004,
+            httpStatus: 404,
+          });
+        }
+
+        const validation = validateBody(req.body, menuValidationRules);
+
+        if (!validation.isValid) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: validation.message,
+          });
+        }
+        const data = validation.data;
+        delete data.created_by;
+        data.modified_by = req.user.adminID;
+        data.modified_date = toMysqlDateTime();
+
+        await CommonModel.updateMasterDetails({
+          table: MODULE_TABLE,
+          data,
+          where: { menu_id },
+        });
+
+        return successResponse(res, {
+          code: 1002,
+          httpStatus: 200,
+          data: [],
+        });
+      }
+
+      // ================= GET SINGLE =================
+      case "GET": {
+        if (!menu_id) {
+          return failureResponse(res, {
+            code: 2004,
+            httpStatus: 404,
+          });
+        }
+
+        const details = await CommonModel.getMasterDetails(
+          MODULE_TABLE,
+          "*",
+          { menu_id }
         );
 
-      menuPayload.menuLink = menuPayload.module_name;
-      if (!menuPayload.table_name) {
-        menuPayload.table_name = menuPayload.module_name;
+        if (!details.length) {
+          return failureResponse(res, {
+            code: 2004,
+            httpStatus: 404,
+          });
+        }
+
+        return successResponse(res, {
+          code: 1004,
+          httpStatus: 200,
+          data: {
+            data: details[0],
+          },
+        });
       }
+
+      default:
+        return failureResponse(res, {
+          code: 2000,
+          httpStatus: 405,
+        });
     }
 
-    const data = await buildTablePayload("menu_master", menuPayload);
-
-    const result = await CommonModel.saveMasterDetails({ table: "menu_master", data, });
-
-    return successResponse(res, {
-      code: 1001,
-      message: "Menu created successfully",
-      data: {
-        data: { id: result.insertId },
-      },
-    });
   } catch (error) {
-    return failureResponse(
-      res,
-      {
-        code: 2008,
-        httpStatus: 500,
-        message:
-          error.message,
-      }
-    );
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
   }
 };
 
-// =====================================================
-// UPDATE MENU
-// =====================================================
-export const update = async (req, res) => {
+// =============================================
+// DELETE
+// =============================================
+export const changeStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { SadminID = 1, } = req.body;
+    const { action = "", ids = [] } = req.body;
 
-    const data = await buildTablePayload("menu_master", {
-      ...req.body,
-      modified_by: SadminID,
-      modified_date: toMysqlDateTime(),
-    });
-
-    await CommonModel.updateMasterDetails({ table: "menu_master", data, where: { menuID: id, }, });
-
-    return successResponse(res, {
-      code: 1002,
-      message: "Menu updated successfully",
-    });
-  } catch (error) {
-    return failureResponse(
-      res,
-      {
-        code: 2008,
-        httpStatus: 500,
-        message: error.message,
-      }
-    );
-  }
-};
-
-// =====================================================
-// DELETE MENU
-// =====================================================
-export const remove = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    await CommonModel.deleteMasterDetails({ table: "menu_master", where: { menuID: id, }, });
-
-    return successResponse(res, {
-      code: 1003,
-      message: "Menu deleted successfully",
-    });
-  } catch (error) {
-    return failureResponse(res,
-      {
-        code: 2008,
-        httpStatus: 500,
-        message: error.message,
-      }
-    );
-  }
-};
-
-// =====================================================
-// GET SIDEBAR MENU
-// =====================================================
-export const getMenuList = async (req, res) => {
-
-  try {
-    // { select, table: MODULE_TABLE, where, values, limit, start, join, other }
-    const parents = await CommonModel.GetMasterListDetails({
-      select: '*',
-      table: "menu_master",
-      where: [
-        "t.status = ?",
-        "t.isParent = ?",
-      ],
-      values: [
-        "active",
-        "yes"
-      ],
-      other: {
-        orderBy: "menuIndex",
-        order: "ASC",
-      },
-    }
-    );
-
-    for (const row of parents) {
-      console.log(row);
-
-      const subMenu = await CommonModel.GetMasterListDetails({
-        table: "menu_master",
-        where: [
-          "t.status = ?",
-          "t.isParent = ?",
-          "t.parentID = ?"
-        ],
-        values: [
-          "active",
-          "no",
-          row.menuID,
-        ],
-        other: {
-          orderBy: "menuIndex",
-          order: "ASC",
-        },
-      }
-      );
-
-      row.subMenu = subMenu;
-    }
-    // console.log(parents);
-
-    return successResponse(res, {
-      data: { data: parents },
-    });
-  } catch (error) {
-    return failureResponse(
-      res,
-      {
-        code: 2008,
-        httpStatus: 500,
-        message: error.message,
-      }
-    );
-  }
-};
-
-export const updatePositions = async (req, res) => {
-  try {
-    const { positions = [] } = req.body;
-
-    if (!Array.isArray(positions) || !positions.length) {
+    if (action.toLowerCase() !== "delete") {
       return failureResponse(res, {
         code: 2000,
         httpStatus: 400,
-        message: "Invalid positions data",
+        message: "Invalid action",
       });
     }
 
-    for (const row of positions) {
-      await CommonModel.updateMasterDetails({
-        table: "menu_master",
-        data: {
-          parentID: row.parentID || 0,
-          menuIndex: row.menuIndex || 1,
-        },
-        where: {
-          menuID: row.menuID,
-        },
+    if (!Array.isArray(ids) || !ids.length) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "ids are required",
       });
     }
+
+    await CommonModel.deleteMasterDetails({
+      table: MODULE_TABLE,
+      where: { menu_id: ids },
+    });
 
     return successResponse(res, {
-      code: 1002,
+      code: 1003,
       httpStatus: 200,
-      message: "Menu positions updated successfully",
+      data: [],
     });
-  } catch (error) {
-    console.log(error);
 
+  } catch (error) {
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,
