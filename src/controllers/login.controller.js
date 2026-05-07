@@ -144,7 +144,6 @@ export const forgotPassword = async (req, res) => {
 
     const otp = generateOtp();
     const expiryDate = new Date(Date.now() + 10 * 60 * 1000);
-
     await saveForgotPasswordOtp(user.adminID, {
       otp,
       otp_exp_time: toMysqlDateTime(expiryDate),
@@ -152,7 +151,7 @@ export const forgotPassword = async (req, res) => {
       modified_by: user.adminID,
       modified_date: toMysqlDateTime(),
     });
-
+  // console.log('sql : ',sql);
     const template = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:650px;margin:auto;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden">
       <div style="background:#0d6efd;padding:20px;text-align:center;color:#fff">
         <h2 style="margin:0;">Forgot Password OTP</h2>
@@ -226,7 +225,7 @@ export const verifyForgotPassword = async (req, res) => {
     }
 
     const user = await findUserByOtp(otp);
-
+    
     if (!user) {
       return failureResponse(res, {
         code: 2004,

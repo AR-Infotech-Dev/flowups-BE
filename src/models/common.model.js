@@ -250,3 +250,16 @@ export const changeMasterStatus = async ({ table = "", status = "Y", ids = [], k
     const [result] = await query(sql, [status, ...ids]);
     return result;
 };
+
+export const updateMenuPositions = async ({ table = "", positions = [] }) => {
+    const cases = positions.map(item => `WHEN ${item.menu_id} THEN ${item.menu_index}`).join(" ");
+    const ids = positions.map(item => item.menu_id).join(",");
+    const sql = `UPDATE ${DB_PREFIX}${table}
+        SET menu_index = CASE menu_id
+            ${cases}
+        END
+        WHERE menu_id IN (${ids})
+    `;
+    const result = await query(sql);
+    return result;
+}

@@ -47,7 +47,7 @@ export const list = async (req, res) => {
       page = 1,
       searchText = "",
       getAll = "N",
-      orderBy = "created_date",
+      orderBy = "menu_index",
       order = "ASC",
       filters = [],
     } = req.body;
@@ -82,7 +82,8 @@ export const list = async (req, res) => {
     const end = Math.min(start + limit, total);
 
     let menuList = [];
-
+    console.log('other : ',other);
+    
     if (getAll === "Y") {
       menuList = await CommonModel.GetMasterListDetails({
         select,
@@ -287,3 +288,29 @@ export const changeStatus = async (req, res) => {
     });
   }
 };
+
+export const updatePositions = async (req, res) => {
+  try {
+    const { positions = [] } = req.body;
+    
+    await CommonModel.updateMenuPositions({
+      table: MODULE_TABLE,
+      positions,
+    });
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      data: [],
+    });
+
+  } catch (error) {
+    console.log(error);
+    
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}

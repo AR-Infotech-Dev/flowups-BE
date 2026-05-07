@@ -1,6 +1,6 @@
 // models/login.model.js
 
-import { query , DB_PREFIX} from "../config/database.js";
+import { query, DB_PREFIX } from "../config/database.js";
 
 // ===================================
 // VERIFY USER DETAILS
@@ -25,6 +25,7 @@ export const verifyUserDetails = async (userName) => {
 // FIND USER BY EMAIL
 // ===================================
 export const findUserByEmail = async (email) => {
+
   const sql = `
     SELECT *
     FROM ${DB_PREFIX}admin
@@ -32,7 +33,6 @@ export const findUserByEmail = async (email) => {
       AND status = 'active'
     LIMIT 1
   `;
-
   const rows = await query(sql, [email]);
   return rows[0] || null;
 };
@@ -46,11 +46,11 @@ export const findUserByOtp = async (otp) => {
     FROM ${DB_PREFIX}admin
     WHERE otp = ?
       AND isEmailSend = 'yes'
-      AND otp_exp_time >= NOW()
       AND status = 'active'
-    LIMIT 1
-  `;
-
+      LIMIT 1
+      `;
+      // AND otp_exp_time >= NOW()
+  
   const rows = await query(sql, [otp]);
   return rows[0] || null;
 };
@@ -79,7 +79,7 @@ export const saveadminInfo = async (data, adminID) => {
   const setClause = keys.map((key) => `${key} = ?`).join(", ");
 
   const sql = `
-    UPDATE admin
+    UPDATE ${DB_PREFIX}admin
     SET ${setClause}
     WHERE adminID = ?
   `;
