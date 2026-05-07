@@ -1,5 +1,6 @@
 
 import express from 'express';
+import { requirePermission } from '../middlewares/permissions.middleware.js';
 
 import {
     list,
@@ -10,10 +11,11 @@ import {
 
 const menuRoutes = express.Router();
 menuRoutes.post("/", list);
-menuRoutes.post("/changestatus", changeStatus);
-menuRoutes.put("/create", getMenuDetails);
-menuRoutes.post("/update-positions", updatePositions);
-menuRoutes.get("/:id", getMenuDetails);
-menuRoutes.post("/:id", getMenuDetails);
+// menuRoutes.post("/", requirePermission(['menu-master', 'menus'], 'view'), list);
+menuRoutes.post("/changestatus", requirePermission(['menu-master', 'menus'], 'edit'), changeStatus);
+menuRoutes.put("/create", requirePermission(['menu-master', 'menus'], 'create'), getMenuDetails);
+menuRoutes.post("/update-positions", requirePermission(['menu-master', 'menus'], 'edit'), updatePositions);
+menuRoutes.get("/:id", requirePermission(['menu-master', 'menus'], 'view'), getMenuDetails);
+menuRoutes.post("/:id", requirePermission(['menu-master', 'menus'], 'edit'), getMenuDetails);
 
 export default menuRoutes;
