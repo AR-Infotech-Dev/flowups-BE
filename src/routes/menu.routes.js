@@ -1,28 +1,21 @@
 
 import express from 'express';
+import { requirePermission } from '../middlewares/permissions.middleware.js';
 
 import {
     list,
-    details,
-    create,
-    update,
-    remove,
-    getMenuList,
+    getMenuDetails,
+    changeStatus,
     updatePositions
 } from '../controllers/menus.controller.js';
 
 const menuRoutes = express.Router();
-
-// menuRoutes.get('/getMenuList', menuController.getMenuList);
-
-// Get list with filters / pagination
 menuRoutes.post("/", list);
-menuRoutes.get("/getMenuList", getMenuList);
-menuRoutes.put("/create", create);
-menuRoutes.post("/updatePositions", updatePositions);
-
-menuRoutes.get("/:id", details);
-menuRoutes.post("/:id", update);
-menuRoutes.delete("/:id", remove);
+// menuRoutes.post("/", requirePermission(['menu-master', 'menus'], 'view'), list);
+menuRoutes.post("/changestatus", requirePermission(['menu-master', 'menus'], 'edit'), changeStatus);
+menuRoutes.put("/create", requirePermission(['menu-master', 'menus'], 'create'), getMenuDetails);
+menuRoutes.post("/update-positions", requirePermission(['menu-master', 'menus'], 'edit'), updatePositions);
+menuRoutes.get("/:id", requirePermission(['menu-master', 'menus'], 'view'), getMenuDetails);
+menuRoutes.post("/:id", requirePermission(['menu-master', 'menus'], 'edit'), getMenuDetails);
 
 export default menuRoutes;

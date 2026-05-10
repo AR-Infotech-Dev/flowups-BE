@@ -26,29 +26,36 @@ const default_columns = {
 };
 
 const custom_columns = {
-    company_id: { table: "info_settings", alias: "dc", column: "companyName", key2: "infoID", select: "" },
+    company_id: { table: "company_master", alias: "dc", column: "company_name", key2: "company_id", select: "" },
     modified_by: { table: "admin", alias: "am", column: "name", key2: "adminID", select: "" },
     created_by: { table: "admin", alias: "ad", column: "name", key2: "adminID", select: "" }
 };
 
 export const list = async (req, res) => {
     try {
-        const { client_id = null, page = 1, searchText = '', getAll = "N", orderBy = "created_date", order = "ASC", filters } = req.body;
+        const { viewAll , client_id = null, page = 1, searchText = '', getAll = "N", orderBy = "created_date", order = "ASC", filters } = req.body;
         const limit = 10;
         const currentPage = Number(page) || 1;
         const start = (currentPage - 1) * limit;
         const freeTextSearch = searchText || '';
-
         const other1 = { orderBy: 'ticket_id', order: 'DESC', searchColumns: ['t.ticket_no', 'cat.categoryName', 'ca.categoryName', 'ct.categoryName', 'a.name', 'cs.name', 'ad.name', 'am.name'] };
         const filterData = prepareFilterData({ filters, searchText, other: other1, default_columns, custom_columns })
         const { select, where, values, join, other } = filterData;
+
         if (client_id) {
             where.push(`client_id = ${client_id}`);
         }
 
-        if (req.user.adminID) {
+        if (req.user.company_id) {
+            where.push(`t.company_id = ${req.user.company_id}`);
+        }
+
+        if (viewAll === "N" && req.user.adminID) {
             where.push(`t.assignee = ${req.user.adminID}`);
         }
+        
+        console.log('where : ',where);
+        
         const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other });
         const totalPages = Math.ceil(total / limit);
 
@@ -104,13 +111,10 @@ export const getTicketDetails = async (req, res) => {
                     created_by: req.user.adminID,
                     created_date: toMysqlDateTime(),
                     ticket_no: `TKT-${next_id}`,
+                    company_id: req.user.company_id,
                 });
                 const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data: data });
-                console.log('assignee,',data.assignee);
-                console.log('assignee, ty :',typeof data.assignee);
-                console.log('data.created_by, ty :',typeof data.created_by);
-                console.log('data.created_by, :', data.created_by);
-                
+
                 if (data.assignee && Number(data.assignee) !== Number(data.created_by)) {
                     emitNotification(data.assignee, {
                         "title": "New Ticket Assigned created",
@@ -135,7 +139,6 @@ export const getTicketDetails = async (req, res) => {
                         httpStatus: 404,
                     });
                 }
-
                 data = await buildTablePayload(MODULE_TABLE, {
                     ...req.body,
                     modified_by: req.user.adminID,
@@ -151,26 +154,17 @@ export const getTicketDetails = async (req, res) => {
 
                 const modifiedByName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.modified_by })
                 const assigneeName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.assignee });
-                
+
                 // Assignee changed
                 if (data?.assignee && Number(old_assignee) !== Number(data.assignee)) {
-                    emitNotification(data.assignee, {
-                        "title": 'New Ticket Assigned',
-                        "body": `Ticket #${data.ticket_no} has been assigned to you by ${modifiedByName?.name || '-'}.`
-                    });
+                    emitNotification(data.assignee, { "title": 'New Ticket Assigned', "body": `Ticket #${data.ticket_no} has been assigned to you by ${modifiedByName?.name || '-'}.` });
                     if (Number(data.assignee) != Number(data.created_by)) {
                         emitNotification(data.created_by, {
-                            "title": "New Ticket Assigned aniket",
+                            "title": "New Ticket Assigned",
                             "body": `Ticket #${data.ticket_no} has been assigned to ${assigneeName?.name || '-'}. created by you`
                         });
                     }
-
-                    await sendEmailToClient(
-                        res,
-                        ticket_id,
-                        "Assignee is Updated",
-                        "We would like to inform you that the service engineer for your support ticket has been updated.",
-                    );
+                    await sendEmailToClient(res, ticket_id, "Assignee is Updated", "We would like to inform you that the service engineer for your support ticket has been updated.",);
                 }
 
                 // Ticket closed
@@ -305,13 +299,14 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
         const { where, values, join, other } = filterData;
         const select = `
             t.ticket_no,
+            t.company_id,
             DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date,
             DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date,
             a.name AS assignedTo,
             cs.name AS clientName,
             cs.email,
             cs.mobile_no,
-            cs.wa_number,
+            cs.wa_no,
             cat.categoryName AS ticket_priority,
             ca.categoryName AS ticket_status,
             ct.categoryName AS query_type
@@ -332,6 +327,7 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
 
         const details = ticketDetails[0] || {};
         const ticket_no = details.ticket_no || "-";
+        const company_id = details.company_id || null;
         const created_date = details.created_date || "-";
         const due_date = details.due_date || "-";
         const email = details.email || "";
@@ -360,7 +356,7 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
             redirect_url: redirect_url
         });
 
-        const { success, error } = await sendEmail({ to: email, subject: subject || "Ticket Notification", html: template, text: "", });
+        const { success, error } = await sendEmail({ to: email, subject: subject || "Ticket Notification", html: template, text: "", company_id, });
 
         if (!success) {
             return failureResponse(res, {
@@ -506,15 +502,58 @@ export const ticketNotificationTemplate = ({
     `;
 };
 
+export const updateStatus = async (req, res) => {
+    const { id: ticket_id = null } = req.params;
+    if (!ticket_id) {
+        return failureResponse(res, {
+            code: 2004,
+            httpStatus: 404,
+        });
+    }
+    const data = await buildTablePayload(MODULE_TABLE, {
+        ticket_status: Number(req.body.ticket_status),
+        modified_by: req.user.adminID,
+        modified_date: toMysqlDateTime(),
+    });
+
+    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data, where: { ticket_id }, });
+
+    const modifiedByName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.modified_by })
+    const ticketData = await CommonModel.getSpecificDetails(MODULE_TABLE, '*', { ticket_id: ticket_id })
+
+    if (data?.ticket_status && data.ticket_status === Number(TICKET_STATUS_CLOSE)) {
+        const feedback_token = createFeedbackToken();
+        await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { feedback_token }, where: { ticket_id }, });
+        const feedback_url = `${env.appFEUrl}/feedback/${ticket_id}/${feedback_token}`;
+
+        emitNotification(ticketData.created_by, {
+            "title": "Ticket Closed",
+            "body": `Your ticket #${ticketData.ticket_no} has been closed by ${modifiedByName?.name || ''}`
+        });
+
+        await sendEmailToClient(
+            res,
+            ticket_id,
+            "Ticket is Closed !",
+            "We would like to inform you that your support ticket has been closed.",
+            feedback_url
+        );
+    }
+
+    return successResponse(res, {
+        code: 1002,
+        httpStatus: 200,
+        data: [],
+    });
+}
+
 /* =======================================================
    SOCKET EMIT
 ======================================================= */
 const emitNotification = (userId = null, data = {}) => {
     try {
         if (!userId) return;
-
         const io = getIO();
-
         io.to(`user_${userId}`).emit("new_notification", data);
     } catch (error) {
         console.log("Socket Error :", error.message);

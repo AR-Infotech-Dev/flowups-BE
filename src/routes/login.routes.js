@@ -6,7 +6,7 @@ import * as loginController from '../controllers/login.controller.js';
 
 const loginRoutes = express.Router();
 loginRoutes.post('/login', loginController.login);
-// loginRoutes.post('/forgotPassword', loginController.userList);
-// loginRoutes.post('/verifyUser', loginController.userList);
+loginRoutes.post('/forgotPassword', loginController.forgotPassword);
+loginRoutes.post('/verifyOtp', loginController.verifyForgotPassword);
 
 export default loginRoutes;

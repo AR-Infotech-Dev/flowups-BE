@@ -18,7 +18,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.static("public"));
 app.use(cors({ origin: true, credentials: true }));
-app.use(morgan("dev"));
+// app.use(morgan("dev"));
+morgan.token("ip", (req) => {
+  return req.ip;
+});
+app.use(morgan(":ip :method :url :status :res[content-length] - :response-time ms"));
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
@@ -44,7 +48,7 @@ app.get("/health", (req, res) => {
   });
 });
 app.use("/uploads", express.static(path.resolve(__dirname, "..", "..", legacyConfig.uploadsDir)));
-app.use('/api/v1/',routes);
+app.use('/api/v1/', routes);
 app.use(notFoundHandler);
 app.use(errorHandler);
 

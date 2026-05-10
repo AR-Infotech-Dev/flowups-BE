@@ -1,14 +1,15 @@
 // models/login.model.js
 
-import { query , DB_PREFIX} from "../config/database.js";
+import { query, DB_PREFIX } from "../config/database.js";
 
 // ===================================
 // VERIFY USER DETAILS
 // ===================================
 export const verifyUserDetails = async (userName) => {
   const sql = `
-    SELECT t.*
+    SELECT t.*, r.slug AS role_slug
     FROM ${DB_PREFIX}admin AS t
+    LEFT JOIN ${DB_PREFIX}user_role_master as r ON t.roleID = r.roleID
     WHERE (
       t.email = ?
       OR t.userName = ?
@@ -21,6 +22,54 @@ export const verifyUserDetails = async (userName) => {
 };
 
 // ===================================
+// FIND USER BY EMAIL
+// ===================================
+export const findUserByEmail = async (email) => {
+
+  const sql = `
+    SELECT *
+    FROM ${DB_PREFIX}admin
+    WHERE email = ?
+      AND status = 'active'
+    LIMIT 1
+  `;
+  const rows = await query(sql, [email]);
+  return rows[0] || null;
+};
+
+// ===================================
+// FIND USER BY OTP
+// ===================================
+export const findUserByOtp = async (otp) => {
+  const sql = `
+    SELECT *
+    FROM ${DB_PREFIX}admin
+    WHERE otp = ?
+      AND isEmailSend = 'yes'
+      AND status = 'active'
+      LIMIT 1
+      `;
+      // AND otp_exp_time >= NOW()
+  
+  const rows = await query(sql, [otp]);
+  return rows[0] || null;
+};
+
+// ===================================
+// SAVE FORGOT PASSWORD OTP
+// ===================================
+export const saveForgotPasswordOtp = async (adminID, data = {}) => {
+  return await saveadminInfo(data, adminID);
+};
+
+// ===================================
+// UPDATE PASSWORD WITH OTP RESET
+// ===================================
+export const updatePasswordByAdminID = async (adminID, data = {}) => {
+  return await saveadminInfo(data, adminID);
+};
+
+// ===================================
 // UPDATE ADMIN INFO
 // ===================================
 export const saveadminInfo = async (data, adminID) => {
@@ -30,7 +79,7 @@ export const saveadminInfo = async (data, adminID) => {
   const setClause = keys.map((key) => `${key} = ?`).join(", ");
 
   const sql = `
-    UPDATE admin
+    UPDATE ${DB_PREFIX}admin
     SET ${setClause}
     WHERE adminID = ?
   `;

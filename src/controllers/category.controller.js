@@ -12,7 +12,7 @@ const default_columns = {
 };
 
 const custom_columns = {
-    // company_id: { table: "info_settings", alias: "dc", column: "companyName", key2: "infoID", select: "" },
+    // company_id: { table: "company_master", alias: "dc", column: "company_name", key2: "company_id", select: "" },
     created_by: { table: "admin", alias: "ad", column: "name", key2: "adminID", select: "" },
     modified_by: { table: "admin", alias: "am", column: "name", key2: "adminID", select: "" },
 };
@@ -411,7 +411,7 @@ export const getslugList = async (req, res) => {
 // ======================================================
 export const changePosition = async (req, res) => {
     try {
-        const { action = "", menuIDs = [] } = req.body;
+        const { action = "", menu_ids = [] } = req.body;
 
         if (action.trim() !== "changePositions") {
             return failureResponse(res, {
@@ -421,15 +421,15 @@ export const changePosition = async (req, res) => {
             });
         }
 
-        if (!Array.isArray(menuIDs) || !menuIDs.length) {
+        if (!Array.isArray(menu_ids) || !menu_ids.length) {
             return failureResponse(res, {
                 code: 2001,
                 httpStatus: 400,
-                message: "menuIDs are required",
+                message: "menu_ids are required",
             });
         }
 
-        for (const [index, categoryId] of menuIDs.entries()) {
+        for (const [index, categoryId] of menu_ids.entries()) {
             await CommonModel.updateMasterDetails({
                 table: MODULE_TABLE,
                 data: {

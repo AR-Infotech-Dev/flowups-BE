@@ -80,10 +80,10 @@ const default_columns = {
     select: "",
   },
   default_company: {
-    table: "info_settings",
+    table: "company_master",
     alias: "dc",
-    column: "companyName",
-    key2: "infoID",
+    column: "company_name",
+    key2: "company_id",
     select: "",
   },
 };
@@ -113,6 +113,7 @@ export const list = async (req, res) => {
       getAll = "N",
       orderBy = "created_date",
       order = "DESC",
+      company_id = null,
       filters,
     } = req.body;
 
@@ -135,7 +136,9 @@ export const list = async (req, res) => {
     });
 
     const { select, where, values, join, other } = filterData;
-
+    if (company_id) {
+      where.push(`t.company_id = ${company_id}`);
+    }
     const total = await CommonModel.getCountsByParameter({
       table: MODULE_TABLE,
       where,
@@ -276,6 +279,7 @@ export const getAdminDetails = async (req, res) => {
           subject: "User Login Credentials",
           html: template,
           text: "",
+          company_id: data.company_id || req.user.company_id,
         });
         // console.log('success : ' ,success);
         if (!success) {
@@ -415,6 +419,65 @@ export const changeStatus = async (req, res) => {
   }
 };
 
+export const updateLocation = async (req, res) => {
+  const adminID = req.user.adminID;
+  const { latitude, longitude } = req.body;
+
+  if (!adminID) {
+    return failureResponse(res, {
+      code: 2004,
+      httpStatus: 404,
+    });
+  }
+
+  const data = {
+    latitude: latitude,
+    longitude: longitude,
+    modified_by: req.user.adminID,
+    modified_date: toMysqlDateTime(),
+  }
+  await CommonModel.updateMasterDetails({
+    table: MODULE_TABLE,
+    data,
+    where: { adminID },
+  });
+
+  return successResponse(res, {
+    code: 1002,
+    httpStatus: 200,
+    data: [],
+  });
+}
+
+export const getMarkers = async (req, res) => {
+  try {
+    const company_id = req.user.company_id;
+    const data = await CommonModel.GetMasterListDetails({
+      select: 't.latitude , t.longitude, t.name',
+      table: MODULE_TABLE,
+      where: [
+        `t.company_id = ${company_id}`,
+        `t.status = 'active'`
+      ],
+    });
+
+    return successResponse(res, {
+      code: 1004,
+      httpStatus: 200,
+      data: {
+        data,
+      },
+    });
+  } catch (error) {
+    console.log(error);
+
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}
 // ======================================================
 // UNIQUE CHECK
 // ======================================================

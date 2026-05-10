@@ -24,10 +24,10 @@ export async function findRoleById(roleID) {
   return rows[0] || null;
 }
 
-export async function findCompanyById(infoID) {
+export async function findCompanyById(company_id) {
   const rows = await query(
-    `SELECT * FROM ${table("info_settings")} WHERE infoID = ? AND status = 'active' LIMIT 1`,
-    [infoID]
+    `SELECT * FROM ${table("company_master")} WHERE company_id = ? AND status = 'active' LIMIT 1`,
+    [company_id]
   );
 
   return rows[0] || null;
