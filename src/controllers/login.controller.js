@@ -9,7 +9,7 @@ import { sendEmail } from "../utils/email.js";
 
 export const login = async (req, res) => {
   try {
-    const { username = "", password = "" } = req.body;
+    const { username = "", password = "", is_mobile = false } = req.body;
     // ===============================
     // VALIDATION
     // ===============================
@@ -60,13 +60,14 @@ export const login = async (req, res) => {
     // ===============================
     // GENERATE TOKEN
     // ===============================
+    const companyId = user.company_id || user.default_company || null;
     const token = jwt.sign(
       {
         adminID: user.adminID,
         username: user.userName,
         roleID: user.roleID,
         role_slug: user.role_slug,
-        company_id: user.company_id,
+        company_id: companyId,
       },
       env.jwtSecret,
       {
@@ -77,6 +78,25 @@ export const login = async (req, res) => {
     // ===============================
     // SUCCESS
     // ===============================
+    if (is_mobile) {
+      return successResponse(res, {
+        code: 1001,
+        httpStatus: 200,
+        data: {
+          token,
+          user: {
+            adminID: user.adminID,
+            name: user.name,
+            userName: user.userName,
+            roleID: user.roleID,
+            company_id: companyId,
+            role_slug: user.role_slug,
+          },
+        },
+        message: "Login successful",
+      });
+    }
+
     res.cookie("access_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -93,7 +113,7 @@ export const login = async (req, res) => {
           name: user.name,
           userName: user.userName,
           roleID: user.roleID,
-          company_id: user.company_id,
+          company_id: companyId,
           role_slug: user.role_slug,
         },
       },
