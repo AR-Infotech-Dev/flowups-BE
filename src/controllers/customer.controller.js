@@ -76,15 +76,16 @@ export const list = async (req, res) => {
     other.freeTextSearch = searchText;
     other.searchColumns = ["t.name", "t.email", "t.mobile_no", "t.company_name", "t.pan_number",];
 
+    // FILTER DATA ACCORDING TO COMPANY ID
+    if (req.user.company_id) {
+      where.push("t.company_id = ?");
+      values.push(req.user.company_id);
+    }
+
     const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other, });
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
     let customerDetails = [];
-
-    // FILTER DATA ACCORDING TO COMPANY ID
-    if (req.user.company_id) {
-      where.push(`t.company_id = ${req.user.company_id}`);
-    }
     
     if (getAll === "Y") {
       customerDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other, });

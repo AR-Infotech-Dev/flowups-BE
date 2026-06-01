@@ -12,6 +12,8 @@ import feedbackRoutes from "./feedback.routes.js";
 import customerRoutes from "./customer.routes.js";
 import companyRoutes from "./company.routes.js";
 import moduleAccessRoutes from "./moduleAccess.routes.js";
+import dashboardRoutes from "./dashboard.routes.js";
+import bootstrapRoutes from "./bootstrap.routes.js";
 
 import {verifyToken} from "../middlewares/auth.middleware.js"
 
@@ -19,6 +21,7 @@ const router = express.Router();
 
 router.use('/', loginRoutes);
 router.use('/',feedbackRoutes);
+router.use('/',bootstrapRoutes);
 router.use('/',verifyToken, commentsRoutes);
 router.use('/users',verifyToken, usersRoutes);
 router.use('/system',verifyToken, systemRoutes);
@@ -29,6 +32,7 @@ router.use('/companies',verifyToken, companyRoutes);
 router.use('/tickets',verifyToken, ticketRoutes);
 router.use('/permissions',verifyToken, moduleAccessRoutes);
 router.use("/notifications", verifyToken,notificationRoutes);
+router.use("/dashboard", verifyToken, dashboardRoutes);
 
 
 export default router;

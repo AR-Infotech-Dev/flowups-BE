@@ -136,8 +136,10 @@ export const list = async (req, res) => {
     });
 
     const { select, where, values, join, other } = filterData;
-    if (company_id) {
-      where.push(`t.company_id = ${company_id}`);
+    const scopedCompanyId = req.user.company_id || company_id;
+    if (scopedCompanyId) {
+      where.push("t.company_id = ?");
+      values.push(scopedCompanyId);
     }
     const total = await CommonModel.getCountsByParameter({
       table: MODULE_TABLE,

@@ -13,6 +13,11 @@ import { title } from "process";
 const MODULE_TABLE = "tickets"
 const TICKET_STATUS_CLOSE = '208'
 const TICKET_STATUS_OPEN = '205'
+const VIEW_ALL_ROLE_SLUGS = new Set(["admin", "superadmin", "super_admin"]);
+
+const canViewAllTickets = (user = {}) => {
+    return VIEW_ALL_ROLE_SLUGS.has(String(user.role_slug || "").toLowerCase());
+};
 
 // ======================================================
 // LIST USERS
@@ -33,7 +38,7 @@ const custom_columns = {
 
 export const list = async (req, res) => {
     try {
-        const { viewAll , client_id = null, page = 1, searchText = '', getAll = "N", orderBy = "created_date", order = "ASC", filters } = req.body;
+        const { viewAll, client_id = null, page = 1, searchText = '', getAll = "N", orderBy = "created_date", order = "ASC", filters } = req.body;
         const limit = 10;
         const currentPage = Number(page) || 1;
         const start = (currentPage - 1) * limit;
@@ -47,15 +52,17 @@ export const list = async (req, res) => {
         }
 
         if (req.user.company_id) {
-            where.push(`t.company_id = ${req.user.company_id}`);
+            where.push("t.company_id = ?");
+            values.push(req.user.company_id);
         }
 
-        if (viewAll === "N" && req.user.adminID) {
-            where.push(`t.assignee = ${req.user.adminID}`);
+        if ((!canViewAllTickets(req.user) || viewAll === "N") && req.user.adminID) {
+            where.push("t.assignee = ?");
+            values.push(req.user.adminID);
         }
-        
-        console.log('where : ',where);
-        
+
+        console.log('where : ', where);
+
         const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other });
         const totalPages = Math.ceil(total / limit);
 

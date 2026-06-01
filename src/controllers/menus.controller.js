@@ -129,6 +129,94 @@ export const list = async (req, res) => {
     });
   }
 };
+export const menulist = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      searchText = "",
+      getAll = "N",
+      orderBy = "menu_index",
+      order = "ASC",
+      filters = [],
+    } = req.body;
+
+    const limit = 10;
+    const currentPage = Number(page) || 1;
+    const start = (currentPage - 1) * limit;
+
+    const filterData = prepareFilterData({
+      filters,
+      searchText,
+      other: {
+        orderBy,
+        order,
+        searchColumns: ["menuName", "module_name", "menuLink"],
+      },
+      default_columns,
+      custom_columns,
+    });
+
+    const { select, where, values, join, other } = filterData;
+
+    const total = await CommonModel.getCountsByParameter({
+      table: MODULE_TABLE,
+      where,
+      values,
+      join,
+      other,
+    });
+
+    const totalPages = Math.ceil(total / limit);
+    const end = Math.min(start + limit, total);
+
+    let menuList = [];
+    console.log('other : ',other);
+    
+    if (getAll === "Y") {
+      menuList = await CommonModel.GetMasterListDetails({
+        select,
+        table: MODULE_TABLE,
+        where,
+        values,
+        join,
+        other,
+      });
+    } else {
+      menuList = await CommonModel.GetMasterListDetails({
+        select,
+        table: MODULE_TABLE,
+        where,
+        values,
+        limit,
+        start,
+        join,
+        other,
+      });
+    }
+
+    return successResponse(res, {
+      code: 1004,
+      httpStatus: 200,
+      data: {
+        data: menuList,
+        pagination: {
+          total,
+          page: currentPage,
+          limit,
+          totalPages,
+          start: total === 0 ? 0 : start + 1,
+          end,
+        },
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
 
 // =============================================
 // CREATE / UPDATE / GET SINGLE

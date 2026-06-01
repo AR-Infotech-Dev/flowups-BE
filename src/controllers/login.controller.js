@@ -77,11 +77,17 @@ export const login = async (req, res) => {
     // ===============================
     // SUCCESS
     // ===============================
+    res.cookie("access_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
     return successResponse(res, {
       code: 1001,
       httpStatus: 200,
       data: {
-        token,
+        // token,
         user: {
           adminID: user.adminID,
           name: user.name,
@@ -95,6 +101,8 @@ export const login = async (req, res) => {
     });
 
   } catch (error) {
+    console.log('error : ', error);
+
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,
@@ -151,7 +159,7 @@ export const forgotPassword = async (req, res) => {
       modified_by: user.adminID,
       modified_date: toMysqlDateTime(),
     });
-  // console.log('sql : ',sql);
+    // console.log('sql : ',sql);
     const template = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:650px;margin:auto;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden">
       <div style="background:#0d6efd;padding:20px;text-align:center;color:#fff">
         <h2 style="margin:0;">Forgot Password OTP</h2>
@@ -225,7 +233,7 @@ export const verifyForgotPassword = async (req, res) => {
     }
 
     const user = await findUserByOtp(otp);
-    
+
     if (!user) {
       return failureResponse(res, {
         code: 2004,

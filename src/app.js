@@ -17,7 +17,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.static("public"));
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || env.allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+}));
 // app.use(morgan("dev"));
 morgan.token("ip", (req) => {
   return req.ip;
