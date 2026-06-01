@@ -5,10 +5,13 @@ const CLOSED_STATUS_ID = 208;
 
 const isAdminRole = (roleSlug = "") => ADMIN_ROLE_SLUGS.has(String(roleSlug).toLowerCase());
 
+const getCompanyId = (user = {}) => user?.company_id || user?.default_company || null;
+
 const addCompanyScope = (where, params, user = {}, alias = "t") => {
-  if (user?.company_id) {
+  const companyId = getCompanyId(user);
+  if (companyId) {
     where.push(`${alias}.company_id = ?`);
-    params.push(user.company_id);
+    params.push(companyId);
   }
 };
 
@@ -65,7 +68,13 @@ export const getSummary = async (user = {}) => {
   ] = await Promise.all([
     getSingleCount({ table: "customer", user }),
     getSingleCount({ table: "admin", user, extraWhere: ["t.status = ?"], extraParams: ["active"] }),
-    getSingleCount({ table: "company_master", user, userScope: false, extraWhere: ["t.status = ?"], extraParams: ["active"] }),
+    getSingleCount({
+      table: "company_master",
+      user: {},
+      userScope: false,
+      extraWhere: getCompanyId(user) ? ["t.status = ?", "t.company_id = ?"] : ["t.status = ?"],
+      extraParams: getCompanyId(user) ? ["active", getCompanyId(user)] : ["active"],
+    }),
     getSingleCount({ table: "tickets", user: {}, extraWhere: ticketWhere, extraParams: ticketParams, userScope: false }),
     query(
       `SELECT COUNT(*) AS total
