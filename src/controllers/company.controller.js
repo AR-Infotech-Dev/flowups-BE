@@ -3,6 +3,7 @@ import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { prepareFilterData } from "../utils/filter.builder.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { validateBody } from "../utils/bodyValidator.js";
+import { clearCompanyMailerCache, testSmtpConnection } from "../utils/email.js";
 
 const MODULE_TABLE = "company_master";
 
@@ -31,6 +32,11 @@ const companyValidationRules = {
   cc_email: { label: "CC Email", type: "email" },
   sender_email: { label: "Sender Email", type: "email" },
   sender_name: { label: "Sender Name" },
+  mail_provider: { label: "Mail Provider" },
+  smtp_host: { label: "SMTP Host" },
+  smtp_port: { label: "SMTP Port" },
+  smtp_encryption: { label: "SMTP Encryption" },
+  smtp_username: { label: "SMTP Username" },
   email_app_password: { label: "App password" },
   mobile_number: { label: "Mobile Number" },
   company_address: { label: "Company Address" },
@@ -39,11 +45,45 @@ const companyValidationRules = {
   city: { label: "City", },
   zip: { label: "Zip" },
   pan: { label: "PAN" },
+  time_format: { label: "Time Format" },
   date_format: { label: "Date Format" },
   email_logo: { label: "Email Logo" },
   created_by: { label: "Created By", type: "number" },
   modified_by: { label: "Modified By", type: "number" },
   status: { label: "Status" },
+};
+
+const mailTestValidationRules = {
+  company_id: { label: "Company ID", type: "number" },
+  company_name: { label: "Company Name" },
+  sender_name: { label: "Sender Name", required: true },
+  sender_email: { label: "Sender Email", type: "email", required: true },
+  mail_provider: { label: "Mail Provider", required: true },
+  smtp_host: { label: "SMTP Host" },
+  smtp_port: { label: "SMTP Port" },
+  smtp_encryption: { label: "SMTP Encryption" },
+  smtp_username: { label: "SMTP Username" },
+  email_app_password: { label: "Email App Password", required: true },
+};
+
+const MAIL_PROVIDER_DEFAULTS = {
+  gmail: { smtp_host: "smtp.gmail.com", smtp_port: "587", smtp_encryption: "tls" },
+  yahoo: { smtp_host: "smtp.mail.yahoo.com", smtp_port: "587", smtp_encryption: "tls" },
+  outlook: { smtp_host: "smtp.office365.com", smtp_port: "587", smtp_encryption: "tls" },
+};
+
+const normalizeMailConfig = (data = {}) => {
+  const provider = String(data.mail_provider || "gmail").toLowerCase();
+  const defaults = MAIL_PROVIDER_DEFAULTS[provider] || {};
+
+  return {
+    ...data,
+    mail_provider: provider,
+    smtp_host: data.smtp_host || defaults.smtp_host,
+    smtp_port: data.smtp_port || defaults.smtp_port || "587",
+    smtp_encryption: data.smtp_encryption || defaults.smtp_encryption || "tls",
+    smtp_username: data.smtp_username || data.sender_email,
+  };
 };
 
 // ======================================================
@@ -152,6 +192,73 @@ export const list = async (req, res) => {
   }
 };
 
+export const testMailConfig = async (req, res) => {
+  try {
+    const validation = validateBody(req.body, mailTestValidationRules);
+    if (!validation.isValid) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: validation.message,
+      });
+    }
+
+    const data = normalizeMailConfig(validation.data);
+    if (data.mail_provider === "custom" && (!data.smtp_host || !data.smtp_port || !data.smtp_username || !data.smtp_encryption)) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "SMTP host, port, username, and encryption are required for Custom SMTP",
+      });
+    }
+
+    const result = await testSmtpConnection(data);
+    const companyId = data.company_id || req.user.company_id || null;
+
+    if (companyId) {
+      try {
+        await CommonModel.updateMasterDetails({
+          table: MODULE_TABLE,
+          data: {
+            mail_connection_status: result.success ? "connected" : "failed",
+            mail_last_tested_at: toMysqlDateTime(),
+          },
+          where: { company_id: companyId },
+        });
+      } catch (statusError) {
+        console.warn("Unable to update SMTP test status:", statusError.message);
+      }
+      clearCompanyMailerCache(companyId);
+    }
+
+    if (!result.success) {
+      return failureResponse(res, {
+        code: 2008,
+        httpStatus: 400,
+        message: result.message,
+      });
+    }
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: result.message,
+      data: {
+        data: {
+          mail_connection_status: "connected",
+          mail_last_tested_at: toMysqlDateTime(),
+        },
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
 // ======================================================
 // CREATE / UPDATE / GET SINGLE
 // ======================================================
@@ -181,6 +288,7 @@ export const getCompanyDetails = async (req, res) => {
           table: MODULE_TABLE,
           data,
         });
+        clearCompanyMailerCache(result.insertId);
 
         return successResponse(res, {
           code: 1001,
@@ -227,6 +335,7 @@ export const getCompanyDetails = async (req, res) => {
             httpStatus: 404,
           });
         }
+        clearCompanyMailerCache(company_id);
 
         return successResponse(res, {
           code: 1002,
