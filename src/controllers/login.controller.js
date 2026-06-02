@@ -9,7 +9,7 @@ import { sendEmail } from "../utils/email.js";
 
 export const login = async (req, res) => {
   try {
-    const { username = "", password = "", is_mobile = false } = req.body;
+    const { username = "", password = "", isMobile = false } = req.body;
     // ===============================
     // VALIDATION
     // ===============================
@@ -26,6 +26,7 @@ export const login = async (req, res) => {
     // ===============================
     const rows = await verifyUserDetails(username);
     const user = rows[0];
+    
     if (!user) {
       return failureResponse(res, {
         code: 2002,
@@ -78,7 +79,7 @@ export const login = async (req, res) => {
     // ===============================
     // SUCCESS
     // ===============================
-    if (is_mobile) {
+    if (isMobile) {
       return successResponse(res, {
         code: 1001,
         httpStatus: 200,
@@ -107,7 +108,6 @@ export const login = async (req, res) => {
       code: 1001,
       httpStatus: 200,
       data: {
-        // token,
         user: {
           adminID: user.adminID,
           name: user.name,

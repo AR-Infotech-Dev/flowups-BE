@@ -66,57 +66,6 @@ export const getDefinations = async (req, res) => {
     }
 };
 
-// ======================================================
-// FREE TEXT SEARCH
-// ======================================================
-// export const getFreeTextSearch = async (req, res) => {
-//     try {
-//         const { text: searchText, type, tableName, wherec, list = "*", status } = req.body;
-
-//         const text = String(searchText || "").trim();
-//         const where = {};
-
-//         if (type === "input") {
-//             if (!text) {
-//                 return failureResponse(res, {
-//                     code: 2001,
-//                     httpStatus: 400,
-//                     message: "Search text required",
-//                 });
-//             }
-
-//             where[`${wherec} LIKE`] = `'%${text}%'`;
-//         }
-
-//         if (String(status) === "true") {
-//             where["t.status"] = `IN ("active")`;
-//         }
-
-//         const result = await CommonModel.GetMasterListDetails(list, tableName, where);
-
-//         if (result.length) {
-//             return successResponse(res, {
-//                 code: 1004,
-//                 httpStatus: 200,
-//                 data: {
-//                     data: result
-//                 },
-//             });
-//         }
-
-//         return failureResponse(res, {
-//             code: 2004,
-//             httpStatus: 404,
-//             message: "No records found",
-//         });
-//     } catch (error) {
-//         return failureResponse(res, {
-//             code: 2008,
-//             httpStatus: 500,
-//             message: error.message,
-//         });
-//     }
-// };
 export const getFreeTextSearch = async (req, res) => {
   try {
     const { text: searchText = "", type = "", tableName = "", wherec = "", list = "*", status = "false" } = req.body;
@@ -147,7 +96,7 @@ export const getFreeTextSearch = async (req, res) => {
       where.push(`t.status = ?`);
       values.push("active");
     }
-    if (['customer'].includes(tableName)) {
+    if (['customer', 'admin'].includes(tableName)) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
     const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values});

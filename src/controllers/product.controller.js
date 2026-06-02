@@ -3,11 +3,24 @@ import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { prepareFilterData } from "../utils/filter.builder.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { validateBody } from "../utils/bodyValidator.js";
-const MODULE_TABLE = "customer";
+
+const MODULE_TABLE = "products";
+
 const isSuperAdmin = (user = {}) => {
-  return String(user.role_slug || "").toLowerCase() === "super_admin";
+  const roleSlug = String(user.role_slug || "").toLowerCase();
+  return ["super_admin", "superadmin", "administrator"].includes(roleSlug);
 };
-const default_columns = {};
+
+const default_columns = {
+  // product_type: {
+  //   table: "categories",
+  //   alias: "pt",
+  //   column: "categoryName",
+  //   key2: "category_id",
+  //   select: "",
+  // },
+};
+
 const custom_columns = {
   company_id: {
     table: "company_master",
@@ -32,33 +45,27 @@ const custom_columns = {
   },
 };
 
-const customerValidationRules = {
-  customer_id: { label: "Customer ID", type: "number" },
-  name: { label: "Name", required: true },
-  email: { label: "Email", type: "email" },
-  mobile_no: { label: "Mobile Number" },
-  contact_person: { label: "Contact Person" },
-  wa_no: { label: "WhatsApp Number" },
-  address: { label: "Address" },
-  pan_number: { label: "PAN Number" },
-  gst_number: { label: "GST Number" },
+const productValidationRules = {
+  product_id: { label: "Product ID", type: "number" },
+  product_name: { label: "Product Name", required: true },
+  product_type: { label: "Product Type", required: true },
+  product_description: { label: "Description" },
   company_id: { label: "Company", type: "number" },
-  product_ids: { label: "Products" },
-  customer_products: { label: "Customer Products" },
-  is_amc: { label: "Is AMC" },
-  amc_term_period: { label: "Term Period" },
-  amc_start_date: { label: "AMC Start Date", type: "date" },
-  amc_end_date: { label: "AMC End Date", type: "date" },
   created_by: { label: "Created By", type: "number" },
   modified_by: { label: "Modified By", type: "number" },
 };
 
-// ======================================================
-// LIST CUSTOMERS
-// ======================================================
 export const list = async (req, res) => {
   try {
-    const { page = 1, searchText = "", getAll = "N", orderBy = "created_date", order = "DESC", filters = [], } = req.body;
+    const {
+      page = 1,
+      searchText = "",
+      getAll = "N",
+      orderBy = "created_date",
+      order = "DESC",
+      filters = [],
+    } = req.body;
+
     const limit = 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
@@ -70,11 +77,8 @@ export const list = async (req, res) => {
         orderBy,
         order,
         searchColumns: [
-          "name",
-          "email",
-          "mobile_no",
-          "company_name",
-          "pan_number",
+          "product_name",
+          "product_description",
         ],
       },
       default_columns,
@@ -83,29 +87,44 @@ export const list = async (req, res) => {
 
     const { select, where, values, join, other } = filterData;
     other.freeTextSearch = searchText;
-    other.searchColumns = ["t.name", "t.email", "t.mobile_no", "t.company_name", "t.pan_number",];
+    other.searchColumns = [
+      "t.product_name",
+      "t.product_description",
+      "pt.categoryName",
+    ];
 
-    // FILTER DATA ACCORDING TO COMPANY ID
     if (!isSuperAdmin(req.user) && req.user.company_id) {
       where.push("t.company_id = ?");
       values.push(req.user.company_id);
     }
 
-    const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other, });
+    const total = await CommonModel.getCountsByParameter({
+      table: MODULE_TABLE,
+      where,
+      values,
+      join,
+      other,
+    });
+
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
-    let customerDetails = [];
 
-    if (getAll === "Y") {
-      customerDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other, });
-    } else {
-      customerDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, limit, start, join, other, });
-    }
+    const productDetails = await CommonModel.GetMasterListDetails({
+      select,
+      table: MODULE_TABLE,
+      where,
+      values,
+      limit: getAll === "Y" ? "" : limit,
+      start,
+      join,
+      other,
+    });
+
     return successResponse(res, {
       code: 1004,
       httpStatus: 200,
       data: {
-        data: customerDetails,
+        data: productDetails,
         pagination: {
           total,
           page: currentPage,
@@ -125,17 +144,14 @@ export const list = async (req, res) => {
   }
 };
 
-// ======================================================
-// CREATE / UPDATE / GET SINGLE
-// ======================================================
-export const getCustomerDetails = async (req, res) => {
+export const getProductDetails = async (req, res) => {
   try {
     const method = req.method.toUpperCase();
-    const { id: customer_id = null } = req.params;
+    const { id: product_id = null } = req.params;
 
     switch (method) {
       case "PUT": {
-        const validation = validateBody(req.body, customerValidationRules);
+        const validation = validateBody(req.body, productValidationRules);
         if (!validation.isValid) {
           return failureResponse(res, {
             code: 2001,
@@ -145,8 +161,7 @@ export const getCustomerDetails = async (req, res) => {
         }
 
         const data = validation.data;
-        delete data.product_ids;
-        data.customer_products = JSON.stringify(normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids));
+        delete data.product_id;
         data.created_by = req.user.adminID;
         data.company_id = req.user.company_id;
         data.created_date = toMysqlDateTime();
@@ -166,14 +181,14 @@ export const getCustomerDetails = async (req, res) => {
       }
 
       case "POST": {
-        if (!customer_id) {
+        if (!product_id) {
           return failureResponse(res, {
             code: 2004,
             httpStatus: 404,
           });
         }
 
-        const validation = validateBody(req.body, customerValidationRules);
+        const validation = validateBody(req.body, productValidationRules);
         if (!validation.isValid) {
           return failureResponse(res, {
             code: 2001,
@@ -183,16 +198,22 @@ export const getCustomerDetails = async (req, res) => {
         }
 
         const data = validation.data;
-        delete data.customer_id;
-        delete data.product_ids;
-        data.customer_products = JSON.stringify(normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids));
+        delete data.product_id;
+        delete data.company_id;
         delete data.created_by;
+        delete data.created_date;
         data.modified_by = req.user.adminID;
+        data.modified_date = toMysqlDateTime();
+
+        const where = { product_id };
+        if (!isSuperAdmin(req.user) && req.user.company_id) {
+          where.company_id = req.user.company_id;
+        }
 
         const result = await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
           data,
-          where: { customer_id },
+          where,
         });
 
         if (!result.affectedRows) {
@@ -210,18 +231,19 @@ export const getCustomerDetails = async (req, res) => {
       }
 
       case "GET": {
-        if (!customer_id) {
+        if (!product_id) {
           return failureResponse(res, {
             code: 2004,
             httpStatus: 404,
           });
         }
 
-        const details = await CommonModel.getMasterDetails(
-          MODULE_TABLE,
-          "*",
-          { customer_id }
-        );
+        const where = { product_id };
+        if (!isSuperAdmin(req.user) && req.user.company_id) {
+          where.company_id = req.user.company_id;
+        }
+
+        const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", where);
 
         if (!details.length) {
           return failureResponse(res, {
@@ -230,17 +252,11 @@ export const getCustomerDetails = async (req, res) => {
           });
         }
 
-        const customerData = details[0];
-        const products = parseCustomerProducts(customerData.customer_products);
-        customerData.product_ids = products.map((product) => product.product_id);
-        customerData.customer_products = products;
-        customerData.products = products;
-
         return successResponse(res, {
           code: 1004,
           httpStatus: 200,
           data: {
-            data: customerData,
+            data: details[0],
           },
         });
       }
@@ -260,69 +276,6 @@ export const getCustomerDetails = async (req, res) => {
   }
 };
 
-const normalizeProductIds = (value) => {
-  if (Array.isArray(value)) {
-    return value.map(String).map((item) => item.trim()).filter(Boolean);
-  }
-
-  if (value === undefined || value === null) {
-    return [];
-  }
-
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-};
-
-const normalizeCustomerProducts = (value) => {
-  if (typeof value === "string") {
-    try {
-      const parsed = JSON.parse(value);
-      return normalizeCustomerProducts(parsed);
-    } catch {
-      return normalizeProductIds(value).map((product_id) => ({ product_id, serial_number: "" }));
-    }
-  }
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === "object" && item !== null) {
-          return {
-            product_id: item.product_id,
-            product_name: item.product_name || "",
-            serial_number: item.serial_number || "",
-          };
-        }
-
-        return {
-          product_id: item,
-          product_name: "",
-          serial_number: "",
-        };
-      })
-      .filter((item) => item.product_id);
-  }
-
-  return [];
-};
-
-const parseCustomerProducts = (value) => {
-  if (Array.isArray(value)) return value;
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-// ======================================================
-// DELETE
-// ======================================================
 export const changeStatus = async (req, res) => {
   try {
     const { action = "", ids = [] } = req.body;
@@ -343,9 +296,14 @@ export const changeStatus = async (req, res) => {
       });
     }
 
+    const where = { product_id: ids };
+    if (!isSuperAdmin(req.user) && req.user.company_id) {
+      where.company_id = req.user.company_id;
+    }
+
     await CommonModel.deleteMasterDetails({
       table: MODULE_TABLE,
-      where: { customer_id: ids },
+      where,
     });
 
     return successResponse(res, {

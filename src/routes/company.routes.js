@@ -6,6 +6,7 @@ const companyRoutes = express.Router();
 
 companyRoutes.post("/", requirePermission(['company-master', 'companies'], "view"), companyController.list);
 companyRoutes.post("/delete", requirePermission(['company-master', 'companies'], "delete"), companyController.changeStatus);
+companyRoutes.post("/mail-config/test", requirePermission(['company-master', 'companies'], "edit"), companyController.testMailConfig);
 companyRoutes.put("/create", requirePermission(['company-master', 'companies'], "create"), companyController.getCompanyDetails);
 companyRoutes.get("/:id", requirePermission(['company-master', 'companies'], "view"), companyController.getCompanyDetails);
 companyRoutes.post("/:id", requirePermission(['company-master', 'companies'], "edit"), companyController.getCompanyDetails);

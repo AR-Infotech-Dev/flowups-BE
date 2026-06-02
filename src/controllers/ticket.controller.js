@@ -18,6 +18,43 @@ const VIEW_ALL_ROLE_SLUGS = new Set(["admin", "superadmin", "super_admin"]);
 const canViewAllTickets = (user = {}) => {
     return VIEW_ALL_ROLE_SLUGS.has(String(user.role_slug || "").toLowerCase());
 };
+const isSuperAdmin = (user = {}) => {
+    return String(user.role_slug || "").toLowerCase() === "super_admin";
+};
+
+const parseDateOnly = (value = null) => {
+    if (!value) return null;
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
+
+const isCustomerAmcActive = (customer = {}) => {
+    if (String(customer?.is_amc || "").toLowerCase() !== "yes") return false;
+
+    const endDate = parseDateOnly(customer?.amc_end_date);
+    if (!endDate) return false;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return endDate >= today;
+};
+
+const resolveTicketActiveAmc = async (clientId = null) => {
+    if (!clientId) return "n";
+
+    const customer = await CommonModel.getSpecificDetails(
+        "customer",
+        "is_amc, amc_start_date, amc_end_date, amc_term_period",
+        { customer_id: clientId }
+    );
+
+    return isCustomerAmcActive(customer) ? "y" : "n";
+};
 
 // ======================================================
 // LIST USERS
@@ -27,7 +64,13 @@ const default_columns = {
     ticket_status: { table: "categories", alias: "ca", column: "categoryName", key2: "category_id", select: "ca.cat_color AS status_color" },
     query_type: { table: "categories", alias: "ct", column: "categoryName", key2: "category_id", select: "ct.cat_color AS type_color" },
     assignee: { table: "admin", alias: "a", column: "name", key2: "adminID", select: "" },
-    client_id: { table: "customer", alias: "cs", column: "name", key2: "customer_id", select: "" },
+    client_id: {
+        table: "customer",
+        alias: "cs",
+        column: "name",
+        key2: "customer_id",
+        select: "cs.name AS client_name"
+    },
 };
 
 const custom_columns = {
@@ -51,17 +94,20 @@ export const list = async (req, res) => {
             where.push(`client_id = ${client_id}`);
         }
 
-        if (req.user.company_id) {
+        if (!isSuperAdmin(req.user) && req.user.company_id) {
             where.push("t.company_id = ?");
             values.push(req.user.company_id);
         }
 
-        if ((!canViewAllTickets(req.user) || viewAll === "N") && req.user.adminID) {
+        const shouldFilterByAssignee =
+            !isSuperAdmin(req.user) &&
+            !(String(req.user.role_slug || "").toLowerCase() === "admin" && viewAll === "Y") &&
+            req.user.adminID;
+
+        if (shouldFilterByAssignee) {
             where.push("t.assignee = ?");
             values.push(req.user.adminID);
         }
-
-        console.log('where : ', where);
 
         const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other });
         const totalPages = Math.ceil(total / limit);
@@ -113,8 +159,10 @@ export const getTicketDetails = async (req, res) => {
         switch (method) {
             case "PUT": {
                 const next_id = await CommonModel.getNextID(MODULE_TABLE, 'ticket_id');
+                const active_amc = await resolveTicketActiveAmc(req.body.client_id);
                 data = await buildTablePayload(MODULE_TABLE, {
                     ...req.body,
+                    active_amc,
                     created_by: req.user.adminID,
                     created_date: toMysqlDateTime(),
                     ticket_no: `TKT-${next_id}`,
@@ -146,8 +194,10 @@ export const getTicketDetails = async (req, res) => {
                         httpStatus: 404,
                     });
                 }
+                const active_amc = req.body.client_id ? await resolveTicketActiveAmc(req.body.client_id) : undefined;
                 data = await buildTablePayload(MODULE_TABLE, {
                     ...req.body,
+                    active_amc,
                     modified_by: req.user.adminID,
                     modified_date: toMysqlDateTime(),
                 });
@@ -156,7 +206,8 @@ export const getTicketDetails = async (req, res) => {
                 const old_assignee = old_details?.length > 0 ? old_details[0]?.old_assignee : null;
                 const old_ticket_status = old_details?.length > 0 ? old_details[0]?.old_ticket_status : null;
                 const old_due_date = old_details?.length > 0 ? old_details[0]?.old_due_date : null;
-
+                console.log('data : ' , data);
+                
                 await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data, where: { ticket_id }, });
 
                 const modifiedByName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.modified_by })
