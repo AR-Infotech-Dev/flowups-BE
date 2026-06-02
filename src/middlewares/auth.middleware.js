@@ -35,10 +35,11 @@ export const verifyToken = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
     const cookieToken = req.cookies?.access_token;
+
     const bearerToken = authHeader.startsWith("Bearer ")
       ? authHeader.split(" ")[1]
       : "";
-
+    
     const token = cookieToken || bearerToken;
 
     if (!token) {

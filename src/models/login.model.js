@@ -17,7 +17,6 @@ export const verifyUserDetails = async (userName) => {
     )
     AND t.status = 'active'
   `;
-
   return await query(sql, [userName, userName, userName]);
 };
 

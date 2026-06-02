@@ -9,6 +9,13 @@ import { sendEmail } from "../utils/email.js";
 import { env } from "../config/env.js";
 
 const MODULE_TABLE = "admin";
+const SUPER_ADMIN_ROLE_SLUGS = new Set(["super_admin", "superadmin", "administrator"]);
+
+const isSuperAdminRole = (roleSlug = "") =>
+  SUPER_ADMIN_ROLE_SLUGS.has(String(roleSlug || "").toLowerCase());
+
+const getUserCompanyId = (user = {}) =>
+  user?.company_id || user?.default_company || null;
 
 // ======================================================
 // VALIDATION SCHEMA
@@ -86,6 +93,13 @@ const default_columns = {
     key2: "company_id",
     select: "",
   },
+  // company_id: {
+  //   table: "company_master",
+  //   alias: "cm",
+  //   column: "company_name",
+  //   key2: "company_id",
+  //   select: "",
+  // },
 };
 
 const custom_columns = {
@@ -136,11 +150,18 @@ export const list = async (req, res) => {
     });
 
     const { select, where, values, join, other } = filterData;
-    const scopedCompanyId = req.user.company_id || company_id;
+    const scopedCompanyId = isSuperAdminRole(req.user?.role_slug)
+      ? null
+      : getUserCompanyId(req.user);
+
     if (scopedCompanyId) {
       where.push("t.company_id = ?");
       values.push(scopedCompanyId);
     }
+    // HIDE SUPER ADMIN FROM LIST
+    where.push("r.slug != ?");
+    values.push('super_admin');
+
     const total = await CommonModel.getCountsByParameter({
       table: MODULE_TABLE,
       where,
@@ -209,10 +230,12 @@ export const getAdminDetails = async (req, res) => {
   try {
     const method = req.method.toUpperCase();
     const { id: adminID = null } = req.params;
+    
     const body = await buildTablePayload(MODULE_TABLE, req.body);
+    
+    delete body.alive_data;
 
     let data = {};
-
     if (method !== "GET") {
       const result = validate(userSchema, body);
 
@@ -423,7 +446,7 @@ export const changeStatus = async (req, res) => {
 
 export const updateLocation = async (req, res) => {
   const adminID = req.user.adminID;
-  const { latitude, longitude } = req.body;
+  const { latitude, longitude, alive_data } = req.body;
 
   if (!adminID) {
     return failureResponse(res, {
@@ -435,6 +458,7 @@ export const updateLocation = async (req, res) => {
   const data = {
     latitude: latitude,
     longitude: longitude,
+    alive_data: alive_data,
     modified_by: req.user.adminID,
     modified_date: toMysqlDateTime(),
   }
@@ -458,7 +482,7 @@ export const getMarkers = async (req, res) => {
       select: 't.latitude , t.longitude, t.name',
       table: MODULE_TABLE,
       where: [
-        `t.company_id = ${company_id}`,
+        // `t.company_id = ${company_id}`,
         `t.status = 'active'`
       ],
     });
