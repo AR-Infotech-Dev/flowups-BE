@@ -153,10 +153,10 @@ const getTransporter = async (company_id = null) => {
 // ================================
 // Generic Send Email Function
 // ================================
-export const sendEmail = async ({ to, subject, html, text = "", company_id = null, }) => {
+export const sendEmail = async ({ to, subject, html, text = "", company_id = null, attachments = [], }) => {
     try {
         const { transporter, from } = await getTransporter(company_id);
-        const info = await transporter.sendMail({ from, to, subject, text, html, });
+        const info = await transporter.sendMail({ from, to, subject, text, html, attachments, });
         return {
             success: true,
             message: "Email sent successfully",
