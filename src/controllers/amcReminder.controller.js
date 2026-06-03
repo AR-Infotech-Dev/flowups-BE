@@ -325,7 +325,7 @@ const buildReminderTemplate = ({ customer = {}, supportCallCount = 0 }) => {
 };
 
 const insertReminderLog = async ({ customer, user, includeReport, subject, status = "sent", errorMessage = null }) => {
-  await ensureReminderTable();
+  // await ensureReminderTable();
   await query(
     `
       INSERT INTO ${DB_PREFIX}amc_reminder_logs
@@ -347,7 +347,7 @@ const insertReminderLog = async ({ customer, user, includeReport, subject, statu
 };
 
 const hasReminderSentToday = async (customerId) => {
-  await ensureReminderTable();
+  // await ensureReminderTable();
 
   const rows = await query(
     `

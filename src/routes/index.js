@@ -16,6 +16,7 @@ import moduleAccessRoutes from "./moduleAccess.routes.js";
 import dashboardRoutes from "./dashboard.routes.js";
 import bootstrapRoutes from "./bootstrap.routes.js";
 import amcReminderRoutes from "./amcReminder.routes.js";
+import reportsRoutes from "./reports.routes.js";
 
 import {verifyToken} from "../middlewares/auth.middleware.js"
 
@@ -34,6 +35,7 @@ router.use('/companies',verifyToken, companyRoutes);
 router.use('/products',verifyToken, productRoutes);
 router.use('/tickets',verifyToken, ticketRoutes);
 router.use('/amc-reminders', verifyToken, amcReminderRoutes);
+router.use('/reports', verifyToken, reportsRoutes);
 router.use('/permissions',verifyToken, moduleAccessRoutes);
 router.use("/notifications", verifyToken,notificationRoutes);
 router.use("/dashboard", verifyToken, dashboardRoutes);
