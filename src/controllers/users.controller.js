@@ -504,6 +504,252 @@ export const getMarkers = async (req, res) => {
     });
   }
 }
+
+export const getProfile = async (req, res) => {
+  try {
+    const adminID = req.user?.adminID;
+
+    if (!adminID) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    const rows = await CommonModel.GetMasterListDetails({
+      select: `
+        t.adminID,
+        t.name,
+        t.email,
+        t.dateOfBirth,
+        t.userName,
+        t.whatsappNo,
+        t.time_zone,
+        t.roleID,
+        r.roleName AS roleName,
+        r.slug AS role_slug,
+        t.company_id,
+        cm.company_name AS company_name,
+        t.is_approver,
+        t.google_location,
+        t.status,
+        t.address,
+        t.contactNo,
+        t.created_date,
+        t.lastLogin
+      `,
+      table: MODULE_TABLE,
+      where: ["t.adminID = ?"],
+      values: [adminID],
+      join: [
+        {
+          type: "LEFT JOIN",
+          table: "user_role_master",
+          alias: "r",
+          key1: "roleID",
+          key2: "roleID",
+        },
+        {
+          type: "LEFT JOIN",
+          table: "company_master",
+          alias: "cm",
+          key1: "company_id",
+          key2: "company_id",
+        },
+      ],
+    });
+
+    if (!rows.length) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    return successResponse(res, {
+      code: 1004,
+      httpStatus: 200,
+      data: {
+        data: rows[0],
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const adminID = req.user?.adminID;
+
+    if (!adminID) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    const editableData = {
+      email: req.body.email,
+      whatsappNo: req.body.whatsappNo ?? req.body.whatsapp_no ?? req.body.wa_no,
+      address: req.body.address,
+      userName: req.body.userName ?? req.body.user_name,
+    };
+
+    const profileSchema = Joi.object({
+      email: Joi.string().email().required(),
+      whatsappNo: Joi.string().allow("", null),
+      address: Joi.string().allow("", null),
+      userName: Joi.string().trim().min(3).required(),
+    });
+
+    const result = validate(profileSchema, editableData);
+
+    if (!result.isValid) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: result.message.replace(/"/g, ""),
+      });
+    }
+
+    const duplicateCheck = await validateAdminDetails(
+      result.value.email,
+      result.value.userName,
+      adminID
+    );
+
+    if (duplicateCheck) {
+      return failureResponse(res, duplicateCheck);
+    }
+
+    await CommonModel.updateMasterDetails({
+      table: MODULE_TABLE,
+      data: {
+        ...result.value,
+        modified_by: adminID,
+        modified_date: toMysqlDateTime(),
+      },
+      where: { adminID },
+    });
+
+    const updatedRows = await CommonModel.getMasterDetails(
+      MODULE_TABLE,
+      "*",
+      { adminID }
+    );
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: "Profile updated successfully",
+      data: {
+        data: updatedRows[0] || result.value,
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+export const changeProfilePassword = async (req, res) => {
+  try {
+    const adminID = req.user?.adminID;
+    const { current_password, currentPassword, new_password, newPassword, confirm_password, confirmPassword } = req.body;
+    const current = current_password ?? currentPassword;
+    const next = new_password ?? newPassword;
+    const confirm = confirm_password ?? confirmPassword;
+
+    if (!adminID) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    if (!current || !next || !confirm) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Current password, new password and confirm password are required",
+      });
+    }
+
+    if (String(next).length < 6) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "New password must be at least 6 characters",
+      });
+    }
+
+    if (String(next) !== String(confirm)) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "New password and confirm password must match",
+      });
+    }
+
+    const rows = await CommonModel.getMasterDetails(
+      MODULE_TABLE,
+      "adminID, password",
+      { adminID }
+    );
+    const user = rows[0];
+
+    if (!user) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    if (String(current) !== String(user.password)) {
+      return failureResponse(res, {
+        code: 2002,
+        httpStatus: 401,
+        message: "Current password is incorrect",
+      });
+    }
+
+    await CommonModel.updateMasterDetails({
+      table: MODULE_TABLE,
+      data: {
+        password: next,
+        modified_by: adminID,
+        modified_date: toMysqlDateTime(),
+      },
+      where: { adminID },
+    });
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: "Password changed successfully",
+      data: [],
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
 // ======================================================
 // UNIQUE CHECK
 // ======================================================
