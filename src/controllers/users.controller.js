@@ -7,6 +7,8 @@ import { buildTablePayload } from "../utils/tablePayload.js";
 import Joi from "joi";
 import { sendEmail } from "../utils/email.js";
 import { env } from "../config/env.js";
+import { USER_ACCOUNT_CREDENTIALS } from "../utils/emailtemplates.js";
+import { hashPassword, verifyPassword } from "../utils/password.js";
 
 const MODULE_TABLE = "admin";
 const SUPER_ADMIN_ROLE_SLUGS = new Set(["super_admin", "superadmin", "administrator"]);
@@ -16,6 +18,12 @@ const isSuperAdminRole = (roleSlug = "") =>
 
 const getUserCompanyId = (user = {}) =>
   user?.company_id || user?.default_company || null;
+
+const sanitizeSqlPayload = (payload = {}) =>
+  Object.entries(payload).reduce((data, [key, value]) => {
+    data[key] = value === undefined ? null : value;
+    return data;
+  }, {});
 
 // ======================================================
 // VALIDATION SCHEMA
@@ -230,9 +238,9 @@ export const getAdminDetails = async (req, res) => {
   try {
     const method = req.method.toUpperCase();
     const { id: adminID = null } = req.params;
-    
+
     const body = await buildTablePayload(MODULE_TABLE, req.body);
-    
+
     delete body.alive_data;
 
     let data = {};
@@ -262,6 +270,11 @@ export const getAdminDetails = async (req, res) => {
 
     switch (method) {
       case "PUT": {
+        const plainPassword = data.password;
+        if (plainPassword) {
+          data.password = await hashPassword(plainPassword);
+        }
+
         data = await buildTablePayload(MODULE_TABLE, {
           ...data,
           created_by: req.user.adminID,
@@ -273,32 +286,12 @@ export const getAdminDetails = async (req, res) => {
           data,
         });
 
-        const template = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:650px;margin:auto;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden">
-        <div style="background:#0d6efd;padding:20px;text-align:center;color:#fff">
-          <h2 style="margin:0;">Account Credentials</h2>
-        </div>
-        <div style="padding:25px;color:#333;">
-          <p>Hello <b>${data.name}</b>,</p>
-          <p>Your account has been created successfully. Please use the credentials below to login.</p>
-          <table style="width:100%;border-collapse:collapse;margin-top:15px;">
-            <tr>
-              <td style="padding:10px;border:1px solid #ddd;"><b>Username</b></td>
-              <td style="padding:10px;border:1px solid #ddd;">${data.userName}</td>
-            </tr>
-            <tr>
-              <td style="padding:10px;border:1px solid #ddd;"><b>Password</b></td>
-              <td style="padding:10px;border:1px solid #ddd;">${data.password}</td>
-            </tr>
-          </table>
-          <p style="margin-top:25px;">
-            <b>Important:</b> Please change your password after first login.
-          </p>
-          <p>Regards,<br/><b>Support Team @ </br>${env.appName}</br></p>
-        </div>
-        <div style="background:#f8f9fa;padding:12px;text-align:center;font-size:12px;color:#666;">
-          This is an automated email. Please do not reply.
-        </div>
-      </div>`;
+        const template = USER_ACCOUNT_CREDENTIALS({
+          name: data.name,
+          userName: data.userName,
+          password: plainPassword,
+          appName: env.appName,
+        });
         const { success, error } = await sendEmail({
           to: data.email,
           subject: "User Login Credentials",
@@ -330,6 +323,12 @@ export const getAdminDetails = async (req, res) => {
             code: 2004,
             httpStatus: 404,
           });
+        }
+
+        if (data.password) {
+          data.password = await hashPassword(data.password);
+        } else {
+          delete data.password;
         }
 
         data = await buildTablePayload(MODULE_TABLE, {
@@ -445,34 +444,70 @@ export const changeStatus = async (req, res) => {
 };
 
 export const updateLocation = async (req, res) => {
-  const adminID = req.user.adminID;
-  const { latitude, longitude, alive_data } = req.body;
+  try {
+    const adminID = req.user?.adminID;
+    const latitude = req.body?.latitude ?? req.body?.lat;
+    const longitude = req.body?.longitude ?? req.body?.lng;
 
-  if (!adminID) {
+    if (!adminID) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    if (latitude === undefined || longitude === undefined || latitude === "" || longitude === "") {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Latitude and longitude are required",
+      });
+    }
+
+    const data = sanitizeSqlPayload(await buildTablePayload(MODULE_TABLE, {
+      latitude,
+      longitude,
+      alive_data: req.body?.alive_data,
+      modified_by: adminID,
+      modified_date: toMysqlDateTime(),
+    }));
+
+    if (!Object.keys(data).length) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "No valid location fields found for update",
+      });
+    }
+
+    const result = await CommonModel.updateMasterDetails({
+      table: MODULE_TABLE,
+      data,
+      where: { adminID },
+    });
+
+    if (!result.affectedRows) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: "Location updated successfully",
+      data: [],
+    });
+  } catch (error) {
     return failureResponse(res, {
-      code: 2004,
-      httpStatus: 404,
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
     });
   }
-
-  const data = {
-    latitude: latitude,
-    longitude: longitude,
-    alive_data: alive_data,
-    modified_by: req.user.adminID,
-    modified_date: toMysqlDateTime(),
-  }
-  await CommonModel.updateMasterDetails({
-    table: MODULE_TABLE,
-    data,
-    where: { adminID },
-  });
-
-  return successResponse(res, {
-    code: 1002,
-    httpStatus: 200,
-    data: [],
-  });
 }
 
 export const getMarkers = async (req, res) => {
@@ -718,7 +753,9 @@ export const changeProfilePassword = async (req, res) => {
       });
     }
 
-    if (String(current) !== String(user.password)) {
+    const isCurrentPasswordValid = await verifyPassword(current, user.password);
+
+    if (!isCurrentPasswordValid) {
       return failureResponse(res, {
         code: 2002,
         httpStatus: 401,
@@ -726,10 +763,12 @@ export const changeProfilePassword = async (req, res) => {
       });
     }
 
+    const hashedPassword = await hashPassword(next);
+
     await CommonModel.updateMasterDetails({
       table: MODULE_TABLE,
       data: {
-        password: next,
+        password: hashedPassword,
         modified_by: adminID,
         modified_date: toMysqlDateTime(),
       },

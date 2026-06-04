@@ -8,6 +8,7 @@ import { sendEmail } from "../utils/email.js";
 import { env } from "../config/env.js";
 import { createFeedbackToken } from "./feedback.controller.js";
 import { getIO } from "../socket/index.js";
+import { TICKET_NOTIFICATION } from "../utils/emailtemplates.js";
 import { title } from "process";
 
 const MODULE_TABLE = "tickets"
@@ -399,19 +400,19 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
             return failureResponse(res, { code: 2004, httpStatus: 404, message: "Client email not found", });
         }
 
-        const template = ticketNotificationTemplate({
+        const template = TICKET_NOTIFICATION({
             clientName,
             ticketNo: ticket_no,
             subject: subject || "Ticket Notification",
             createdDate: created_date,
-            due_date: due_date,
+            dueDate: due_date,
             assignedTo,
             message: message || "Your ticket has been updated successfully.",
             category: query_type,
             status: ticket_status,
             priority: ticket_priority,
             appName: env?.appName || "Support System",
-            redirect_url: redirect_url
+            redirectUrl: redirect_url
         });
 
         const { success, error } = await sendEmail({ to: email, subject: subject || "Ticket Notification", html: template, text: "", company_id, });
@@ -429,135 +430,6 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
         console.error("sendEmailToClient Error :", error);
         return failureResponse(res, { code: 5001, httpStatus: 500, message: error.message || "Something went wrong", });
     }
-};
-
-export const ticketNotificationTemplate = ({
-    clientName = "User",
-    ticketNo = "-",
-    subject = "-",
-    priority = "-",
-    status = "-",
-    createdDate = "-",
-    due_date = "-",
-    category = "-",
-    assignedTo = "-",
-    message = "-",
-    appName = "Support System",
-    redirect_url = '',
-    logoUrl = `${env.baseUrl}/images/logo.png`,
-    logoWidth = "140",    // Width in px
-    logoHeight = "auto",  // Height auto
-}) => {
-    return `
-    <div style="margin:0;padding:0;background:#f4f6f8;font-family:Arial,Helvetica,sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f8;padding:30px 0;">
-            <tr>
-                <td align="center">
-                    <table cellpadding="0" cellspacing="0"
-                        style="background:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e5e5e5;max-width:700px;width:100%;">
-                        <tr>
-                            <td style="background:#0d6efd;padding:22px;text-align:center;color:#ffffff;">
-                            ${logoUrl ? ` <img
-                                        src="${logoUrl}"
-                                        alt="${appName}"
-                                        width="${logoWidth}"
-                                        style="max-width:${logoWidth}px;height:${logoHeight};display:block;margin:0 auto 12px auto;"
-                                    />`
-            : ""
-        }
-                                <h2 style="margin:0;">${appName}</h2>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding:30px;color:#333;">
-                                <p>Hello <strong>${clientName}</strong>,</p>
-                                <p>${message}</p>
-                                <table width="100%" cellpadding="0" cellspacing="0"
-                                    style="border-collapse:collapse;margin-top:15px;">
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Ticket No</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${ticketNo}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Subject</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${subject}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Query Type</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${category}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Status</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${status}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Assigned To</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${assignedTo}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Created Date</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${createdDate}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding:10px;border:1px solid #ddd;background:#f8f9fa;">
-                                            <strong>Due Date</strong>
-                                        </td>
-                                        <td style="padding:10px;border:1px solid #ddd;">
-                                            ${due_date}
-                                        </td>
-                                    </tr>
-                                </table>
-                                <p style="margin-top:25px;">
-                                    Thank you for contacting us.
-                                </p>
-                                ${redirect_url && redirect_url.trim() !== ""
-            ? `<p style="margin-top:25px;text-align:left;">
-                                        <a href="${redirect_url}" style="background:#0d6efd; color:#ffffff; text-decoration:none; padding:6px 18px; border-radius:6px; display:inline-block; font-weight:bold;"> Submit Feedback  </a>
-                                    </p>`
-            : ``
-        }
-                                <p>
-                                    Regards,<br />
-                                    <strong>Support Team</strong><br />
-                                    ${appName}
-                                </p>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="background:#f8f9fa;padding:15px;text-align:center;font-size:12px;color:#666;">
-                                This is an automated email. Please do not reply.
-                            </td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-    </div>
-    `;
 };
 
 export const updateStatus = async (req, res) => {

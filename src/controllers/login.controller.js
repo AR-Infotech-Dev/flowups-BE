@@ -6,14 +6,37 @@ import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { validateBody } from "../utils/bodyValidator.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { sendEmail } from "../utils/email.js";
+import { AUTH_FORGOT_PASSWORD_OTP, AUTH_PASSWORD_UPDATED } from "../utils/emailtemplates.js";
+import { hashPassword, isPasswordHash, verifyPassword } from "../utils/password.js";
+import { createActiveSessionId, setActiveSessionId } from "../utils/activeSession.js";
+import { decryptLoginPassword, getLoginPublicKey } from "../utils/loginEncryption.js";
+
+export const getPublicKey = (req, res) => {
+  return successResponse(res, {
+    code: 1004,
+    httpStatus: 200,
+    data: getLoginPublicKey(),
+    message: "success",
+  });
+};
 
 export const login = async (req, res) => {
   try {
-    const { username = "", password = "", isMobile = false } = req.body;
+    const {
+      username = "",
+      password = "",
+      encryptedPassword = "",
+      password_encrypted = "",
+      isMobile = false,
+    } = req.body;
+    const submittedPassword = encryptedPassword || password_encrypted;
+    const loginPassword = submittedPassword
+      ? decryptLoginPassword(submittedPassword)
+      : password;
     // ===============================
     // VALIDATION
     // ===============================
-    if (!username || !password) {
+    if (!username || !loginPassword) {
       return failureResponse(res, {
         code: 2001,
         httpStatus: 400,
@@ -48,9 +71,9 @@ export const login = async (req, res) => {
 
     // ===============================
     // PASSWORD CHECK
-    // (plain text current system)
     // ===============================
-    if (String(password) !== String(user.password)) {
+    const isPasswordValid = await verifyPassword(loginPassword, user.password);
+    if (!isPasswordValid) {
       return failureResponse(res, {
         code: 2002,
         httpStatus: 401,
@@ -58,10 +81,21 @@ export const login = async (req, res) => {
       });
     }
 
+    if (!isPasswordHash(user.password)) {
+      await updatePasswordByAdminID(user.adminID, {
+        password: await hashPassword(loginPassword),
+        modified_by: user.adminID,
+        modified_date: toMysqlDateTime(),
+      });
+    }
+
     // ===============================
     // GENERATE TOKEN
     // ===============================
     const companyId = user.company_id || user.default_company || null;
+    const activeSessionId = createActiveSessionId();
+    await setActiveSessionId(user.adminID, activeSessionId);
+
     const token = jwt.sign(
       {
         adminID: user.adminID,
@@ -69,6 +103,7 @@ export const login = async (req, res) => {
         roleID: user.roleID,
         role_slug: user.role_slug,
         company_id: companyId,
+        active_session_id: activeSessionId,
       },
       env.jwtSecret,
       {
@@ -180,21 +215,10 @@ export const forgotPassword = async (req, res) => {
       modified_date: toMysqlDateTime(),
     });
     // console.log('sql : ',sql);
-    const template = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:650px;margin:auto;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden">
-      <div style="background:#0d6efd;padding:20px;text-align:center;color:#fff">
-        <h2 style="margin:0;">Forgot Password OTP</h2>
-      </div>
-      <div style="padding:25px;color:#333;">
-        <p>Hello <b>${user.name || user.userName || "User"}</b>,</p>
-        <p>Your OTP for password reset is:</p>
-        <div style="font-size:28px;font-weight:bold;letter-spacing:4px;margin:20px 0;color:#0d6efd;">${otp}</div>
-        <p>This OTP will expire in 10 minutes.</p>
-        <p>If you did not request this, please ignore this email.</p>
-      </div>
-      <div style="background:#f8f9fa;padding:12px;text-align:center;font-size:12px;color:#666;">
-        This is an automated email. Please do not reply.
-      </div>
-    </div>`;
+    const template = AUTH_FORGOT_PASSWORD_OTP({
+      name: user.name || user.userName || "User",
+      otp,
+    });
 
     const { success, error } = await sendEmail({
       to: user.email,
@@ -262,8 +286,10 @@ export const verifyForgotPassword = async (req, res) => {
       });
     }
 
+    const hashedPassword = await hashPassword(new_password);
+
     await updatePasswordByAdminID(user.adminID, {
-      password: new_password,
+      password: hashedPassword,
       otp: null,
       otp_exp_time: null,
       isEmailSend: "no",
@@ -271,19 +297,9 @@ export const verifyForgotPassword = async (req, res) => {
       modified_date: toMysqlDateTime(),
     });
 
-    const template = `<div style="font-family:Arial,Helvetica,sans-serif;max-width:650px;margin:auto;border:1px solid #e5e5e5;border-radius:10px;overflow:hidden">
-      <div style="background:#198754;padding:20px;text-align:center;color:#fff">
-        <h2 style="margin:0;">Password Updated</h2>
-      </div>
-      <div style="padding:25px;color:#333;">
-        <p>Hello <b>${user.name || user.userName || "User"}</b>,</p>
-        <p>Your password has been updated successfully.</p>
-        <p>If you did not make this change, please contact support immediately.</p>
-      </div>
-      <div style="background:#f8f9fa;padding:12px;text-align:center;font-size:12px;color:#666;">
-        This is an automated email. Please do not reply.
-      </div>
-    </div>`;
+    const template = AUTH_PASSWORD_UPDATED({
+      name: user.name || user.userName || "User",
+    });
 
     const { success, error } = await sendEmail({
       to: user.email,

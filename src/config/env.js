@@ -29,6 +29,7 @@ export const env = {
   port: Number(process.env.PORT || 3000),
   appName: process.env.APP_NAME || "flowupS CallDesk",
   appUrl: process.env.APP_URL || "http://localhost:3000",
+  appLink: process.env.APP_FE_URL || "http://localhost:5173",
   // appFEUrl: process.env.APP_FE_URL || "http://192.168.1.23:5173",
   appFEUrl: process.env.APP_FE_URL || "http://localhost:5173",
   allowedOrigins: (process.env.ALLOWED_ORIGINS || process.env.APP_FE_URL || "http://localhost:5173")

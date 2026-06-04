@@ -1,8 +1,8 @@
 import { DB_PREFIX, query } from "../config/database.js";
-import { env } from "../config/env.js";
 import { failureResponse, successResponse } from "../utils/apiResponse.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { sendEmail } from "../utils/email.js";
+import { AMC_RENEWAL_REMINDER } from "../utils/emailtemplates.js";
 
 const LIMIT = 10;
 
@@ -264,66 +264,6 @@ const buildReportAttachment = (customer = {}, supportRows = []) => {
   };
 };
 
-const buildReminderTemplate = ({ customer = {}, supportCallCount = 0 }) => {
-  const customerName = escapeHtml(customer.name || "Customer");
-  const amcStartDate = escapeHtml(formatDate(customer.amc_start_date));
-  const amcEndDate = escapeHtml(formatDate(customer.amc_end_date));
-  const appName = escapeHtml(env?.appName || "Support System");
-  const logoUrl = `${env.baseUrl}/images/logo.png`;
-
-  return `
-    <div style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,Helvetica,sans-serif;color:#172033;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f6f8fb;padding:24px 0;">
-        <tr>
-          <td align="center">
-            <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:640px;max-width:94%;background:#ffffff;border:1px solid #e8eef6;border-radius:8px;overflow:hidden;">
-              <tr>
-                <td style="padding:22px 26px;background:#003b7d;color:#ffffff;text-align:center;">
-                  <img src="${logoUrl}" alt="${appName}" width="120" style="display:block;margin:0 auto 12px;max-width:120px;height:auto;" />
-                  <div style="font-size:18px;font-weight:700;">AMC Renewal Reminder</div>
-                  <div style="margin-top:4px;font-size:13px;opacity:.9;">Your annual maintenance contract is nearing expiry.</div>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:26px;">
-                  <p style="margin:0 0 14px;font-size:14px;line-height:1.6;">Dear ${customerName},</p>
-                  <p style="margin:0 0 18px;font-size:14px;line-height:1.6;">
-                    This is a friendly reminder that your AMC period from <strong>${amcStartDate}</strong>
-                    to <strong>${amcEndDate}</strong> is due for renewal.
-                  </p>
-                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:18px 0;border-collapse:collapse;">
-                    <tr>
-                      <td style="padding:10px 12px;border:1px solid #e8eef6;background:#f8fbff;font-size:13px;color:#64748b;">Customer</td>
-                      <td style="padding:10px 12px;border:1px solid #e8eef6;font-size:13px;">${customerName}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:10px 12px;border:1px solid #e8eef6;background:#f8fbff;font-size:13px;color:#64748b;">AMC Expiry</td>
-                      <td style="padding:10px 12px;border:1px solid #e8eef6;font-size:13px;">${amcEndDate}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding:10px 12px;border:1px solid #e8eef6;background:#f8fbff;font-size:13px;color:#64748b;">Support Calls in AMC Period</td>
-                      <td style="padding:10px 12px;border:1px solid #e8eef6;font-size:13px;">${supportCallCount}</td>
-                    </tr>
-                  </table>
-                  <p style="margin:0 0 18px;font-size:14px;line-height:1.6;">
-                    Please contact us to renew your AMC and continue uninterrupted support.
-                  </p>
-                  <p style="margin:0;font-size:14px;line-height:1.6;">Regards,<br/><strong>Support Team</strong><br/>${appName}</p>
-                </td>
-              </tr>
-              <tr>
-                <td style="padding:14px 26px;background:#f8fbff;border-top:1px solid #e8eef6;color:#64748b;font-size:12px;text-align:center;">
-                  This is an automated reminder. Please contact our support team for renewal assistance.
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-      </table>
-    </div>
-  `;
-};
-
 const insertReminderLog = async ({ customer, user, includeReport, subject, status = "sent", errorMessage = null }) => {
   // await ensureReminderTable();
   await query(
@@ -510,7 +450,12 @@ export const sendReminder = async (req, res) => {
 
     const supportRows = await getSupportCallRows(customer.customer_id, customer.amc_start_date, customer.amc_end_date);
     const subject = `AMC renewal reminder - ${customer.name || "Customer"}`;
-    const html = buildReminderTemplate({ customer, supportCallCount: supportRows.length });
+    const html = AMC_RENEWAL_REMINDER({
+      customerName: escapeHtml(customer.name || "Customer"),
+      amcStartDate: escapeHtml(formatDate(customer.amc_start_date)),
+      amcEndDate: escapeHtml(formatDate(customer.amc_end_date)),
+      supportCallCount: supportRows.length,
+    });
     const attachments = includeReport ? [buildReportAttachment(customer, supportRows)] : [];
     const result = await sendEmail({
       to: customer.email,
@@ -538,7 +483,7 @@ export const sendReminder = async (req, res) => {
       });
     }
 
-    await insertReminderLog({ customer, user: req.user, includeReport, subject });
+    // await insertReminderLog({ customer, user: req.user, includeReport, subject });
 
     return successResponse(res, {
       code: 1002,
