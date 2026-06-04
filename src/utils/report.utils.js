@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { CUSTOMER_SUPPORT_REPORT } from "./emailtemplates.js";
 export const CLOSED_STATUS = "208";
 export const formatDate = (value = null) => {
     if (!value) return "-";
@@ -142,6 +143,13 @@ export const buildSupportReportTemplate = ({
     summary = {},
     products = [],
 }) => {
+    return CUSTOMER_SUPPORT_REPORT({
+        customer,
+        supportCallCount,
+        summary,
+        products,
+        companyName: env?.appName || "Support System",
+    });
 
     const customerName = escapeHtml(customer.name || "Customer");
     const companyName = escapeHtml(env?.appName || "Support System");

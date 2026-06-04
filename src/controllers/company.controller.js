@@ -4,8 +4,14 @@ import { prepareFilterData } from "../utils/filter.builder.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { validateBody } from "../utils/bodyValidator.js";
 import { clearCompanyMailerCache, testSmtpConnection } from "../utils/email.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 const MODULE_TABLE = "company_master";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../public/images/company-logos");
 
 const default_columns = {};
 
@@ -84,6 +90,18 @@ const normalizeMailConfig = (data = {}) => {
     smtp_encryption: data.smtp_encryption || defaults.smtp_encryption || "tls",
     smtp_username: data.smtp_username || data.sender_email,
   };
+};
+
+const ensureCompanyLogoDir = () => {
+  fs.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
+};
+
+const getLogoExtension = (file = {}) => {
+  const mime = String(file.mimetype || "").toLowerCase();
+  if (mime === "image/png") return ".png";
+  if (mime === "image/webp") return ".webp";
+  if (mime === "image/svg+xml") return ".svg";
+  return ".jpg";
 };
 
 // ======================================================
@@ -247,6 +265,67 @@ export const testMailConfig = async (req, res) => {
         data: {
           mail_connection_status: "connected",
           mail_last_tested_at: toMysqlDateTime(),
+        },
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+export const uploadCompanyLogo = async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Company logo file is required",
+      });
+    }
+
+    const companyId = req.params.id || req.body.company_id || null;
+    const extension = getLogoExtension(req.file);
+    const safeCompanyPart = companyId ? `company-${companyId}` : "company-new";
+    const fileName = `${safeCompanyPart}-${Date.now()}${extension}`;
+    const relativePath = `/images/company-logos/${fileName}`;
+    const absolutePath = path.join(COMPANY_LOGO_DIR, fileName);
+
+    ensureCompanyLogoDir();
+    fs.writeFileSync(absolutePath, req.file.buffer);
+
+    if (companyId) {
+      const result = await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data: {
+          email_logo: relativePath,
+          modified_by: req.user.adminID,
+          modified_date: toMysqlDateTime(),
+        },
+        where: { company_id: companyId },
+      });
+
+      if (!result.affectedRows) {
+        return failureResponse(res, {
+          code: 2004,
+          httpStatus: 404,
+          message: "Company not found",
+        });
+      }
+
+      clearCompanyMailerCache(companyId);
+    }
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: "Company logo uploaded successfully",
+      data: {
+        data: {
+          email_logo: relativePath,
         },
       },
     });

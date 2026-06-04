@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { failureResponse } from "../utils/apiResponse.js";
+import { getActiveSessionId } from "../utils/activeSession.js";
 
 // export const verifyToken = (req, res, next) => {
 //     try {
@@ -31,7 +32,7 @@ import { failureResponse } from "../utils/apiResponse.js";
 //         });
 //     }
 // };
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
     const cookieToken = req.cookies?.access_token;
@@ -51,6 +52,25 @@ export const verifyToken = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, env.jwtSecret);
+
+    if (!decoded.active_session_id) {
+      return failureResponse(res, {
+        code: 2007,
+        httpStatus: 401,
+        message: "Session expired. Please login again.",
+      });
+    }
+
+    const activeSessionId = await getActiveSessionId(decoded.adminID);
+
+    if (!activeSessionId || activeSessionId !== decoded.active_session_id) {
+      return failureResponse(res, {
+        code: 2009,
+        httpStatus: 401,
+        message: "Session Expired.",
+      });
+    }
+
     req.user = decoded;
 
     return next();
