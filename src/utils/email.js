@@ -22,7 +22,6 @@ export const clearCompanyMailerCache = (company_id = null) => {
         companyMailerCache.delete(String(company_id));
         return;
     }
-
     companyMailerCache.clear();
 };
 
@@ -110,9 +109,9 @@ const getCompanyMailerConfig = async (company_id = null) => {
         return null;
     }
 
-    if (companyMailerCache.has(company_id)) {
-        return companyMailerCache.get(company_id);
-    }
+    // if (companyMailerCache.has(company_id)) {
+    //     return companyMailerCache.get(company_id);
+    // }
 
     const sql = `
         SELECT company_id, company_name, sender_email, sender_name, mail_provider, smtp_host, smtp_port, smtp_encryption, smtp_username, email_app_password, email_logo
