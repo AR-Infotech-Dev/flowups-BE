@@ -35,7 +35,7 @@ import { getActiveSessionId } from "../utils/activeSession.js";
 export const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
-    const isMobile = req.headers.ismobile || false;
+    const isMobile = Boolean(req.headers.ismobile) || false;
     const cookieToken = req.cookies?.access_token;
     console.log("headers:",req.headers);
     
