@@ -5,6 +5,7 @@ import { requirePermission } from "../middlewares/permissions.middleware.js";
 const reportsRoutes = express.Router();
 
 reportsRoutes.post("/user-performance", requirePermission(["reports", "/reports/performance", "performance_reports"], "view"),  reportsController.userPerformance);
+reportsRoutes.post("/work-report", requirePermission(["reports", "/work-report", "/reports/work-report", "work_report"], "view"),  reportsController.workReport);
 reportsRoutes.post("/customer", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"),  reportsController.customerReport );
 reportsRoutes.post("/sendReport", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"),  reportsController.sendReport );
 
