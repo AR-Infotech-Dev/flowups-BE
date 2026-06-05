@@ -28,8 +28,15 @@ export async function ensureActiveSessionColumn() {
   return ensureActiveSessionColumnPromise;
 }
 
-export async function setActiveSessionId(adminID, activeSessionId) {
+export async function setActiveSessionId(adminID, activeSessionId, isMobile = false) {
   await ensureActiveSessionColumn();
+
+  if (isMobile) {
+    return query(
+      `UPDATE ${DB_PREFIX}admin SET active_session_id_mob = ?, modified_date = NOW() WHERE adminID = ?`,
+      [activeSessionId, adminID]
+    );
+  }
 
   return query(
     `UPDATE ${DB_PREFIX}admin SET active_session_id = ?, modified_date = NOW() WHERE adminID = ?`,
@@ -37,11 +44,13 @@ export async function setActiveSessionId(adminID, activeSessionId) {
   );
 }
 
-export async function getActiveSessionId(adminID) {
+export async function getActiveSessionId(adminID,isMobile = false) {
   await ensureActiveSessionColumn();
 
   const rows = await query(
-    `SELECT active_session_id FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`,
+    isMobile 
+    ?`SELECT active_session_id_mob FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`
+    :`SELECT active_session_id FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`,
     [adminID]
   );
 

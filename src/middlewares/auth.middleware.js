@@ -35,6 +35,7 @@ import { getActiveSessionId } from "../utils/activeSession.js";
 export const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
+    const isMobile = req.headers.isMobile || false;
     const cookieToken = req.cookies?.access_token;
 
     const bearerToken = authHeader.startsWith("Bearer ")
@@ -61,7 +62,7 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    const activeSessionId = await getActiveSessionId(decoded.adminID);
+    const activeSessionId = await getActiveSessionId(decoded.adminID,isMobile);
 
     if (!activeSessionId || activeSessionId !== decoded.active_session_id) {
       return failureResponse(res, {

@@ -94,7 +94,7 @@ export const login = async (req, res) => {
     // ===============================
     const companyId = user.company_id || user.default_company || null;
     const activeSessionId = createActiveSessionId();
-    await setActiveSessionId(user.adminID, activeSessionId);
+    await setActiveSessionId(user.adminID, activeSessionId,isMobile);
 
     const token = jwt.sign(
       {
