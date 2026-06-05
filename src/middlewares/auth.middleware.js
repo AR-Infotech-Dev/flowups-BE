@@ -37,7 +37,8 @@ export const verifyToken = async (req, res, next) => {
     const authHeader = req.headers.authorization || "";
     const isMobile = req.headers.isMobile || false;
     const cookieToken = req.cookies?.access_token;
-
+    console.log("headers:",req.headers);
+    
     const bearerToken = authHeader.startsWith("Bearer ")
       ? authHeader.split(" ")[1]
       : "";
