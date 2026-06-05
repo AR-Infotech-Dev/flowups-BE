@@ -6,6 +6,7 @@ import { toMysqlDateTime } from "../utils/dateTime.js";
 import { buildTablePayload } from "../utils/tablePayload.js";
 import { sendEmail } from "../utils/email.js";
 import { env } from "../config/env.js";
+import { DB_PREFIX } from "../config/database.js";
 import { createFeedbackToken } from "./feedback.controller.js";
 import { getIO } from "../socket/index.js";
 import { TICKET_NOTIFICATION } from "../utils/emailtemplates.js";
@@ -21,6 +22,46 @@ const canViewAllTickets = (user = {}) => {
 };
 const isSuperAdmin = (user = {}) => {
     return String(user.role_slug || "").toLowerCase() === "super_admin";
+};
+
+const isAdmin = (user = {}) => {
+    return String(user.role_slug || "").toLowerCase() === "admin";
+};
+
+const getAssigneeHistoryExistsSql = (userId, condition) => `
+    EXISTS (
+        SELECT 1
+        FROM ${DB_PREFIX}ticket_history h
+        WHERE h.ticket_id = t.ticket_id
+          AND h.field_name = 'assignee'
+          AND h.action_type = 'reassigned'
+          AND (${condition})
+    )
+`;
+
+const getTicketVisibilitySelect = (userId = null) => {
+    const safeUserId = Number(userId || 0);
+    if (!safeUserId) {
+        return "";
+    }
+    const delegatedExists = getAssigneeHistoryExistsSql(safeUserId, `h.new_value = ${safeUserId}`);
+    const reassignedExists = getAssigneeHistoryExistsSql(safeUserId, `(h.old_value = ${safeUserId} OR h.changed_by = ${safeUserId})`);
+    return `,
+        CASE
+            WHEN ${delegatedExists} THEN 'delegated'
+            WHEN ${reassignedExists} THEN 'reassigned'
+            ELSE ''
+        END AS delegation_flag,
+        CASE WHEN ${delegatedExists} THEN 'Y' ELSE 'N' END AS is_delegated,
+        CASE WHEN ${reassignedExists} THEN 'Y' ELSE 'N' END AS is_reassigned,
+        CASE
+            WHEN t.created_by = ${safeUserId} THEN 'created'
+            WHEN t.assignee = ${safeUserId} THEN 'assigned'
+            WHEN ${delegatedExists} THEN 'delegated'
+            WHEN ${reassignedExists} THEN 'reassigned'
+            ELSE 'company'
+        END AS visibility_reason
+    `;
 };
 
 const parseDateOnly = (value = null) => {
@@ -57,6 +98,40 @@ const resolveTicketActiveAmc = async (clientId = null) => {
     return isCustomerAmcActive(customer) ? "y" : "n";
 };
 
+const normalizeTicketAddOns = (value = []) => {
+    if (typeof value === "string") {
+        try {
+            return normalizeTicketAddOns(JSON.parse(value));
+        } catch {
+            return value
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean);
+        }
+    }
+
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map((item) => {
+            if (typeof item === "object" && item !== null) {
+                return String(item.name || item.add_on_name || item.label || item.value || "").trim();
+            }
+
+            return String(item || "").trim();
+        })
+        .filter(Boolean);
+};
+
+const prepareTicketBody = (source = {}) => ({
+    ...source,
+    ...(Object.prototype.hasOwnProperty.call(source, "product_add_ons")
+        ? { product_add_ons: JSON.stringify(normalizeTicketAddOns(source.product_add_ons)) }
+        : {}),
+});
+
 // ======================================================
 // LIST USERS
 // ======================================================
@@ -90,6 +165,8 @@ export const list = async (req, res) => {
         const other1 = { orderBy: 'ticket_id', order: 'DESC', searchColumns: ['t.ticket_no', 'cat.categoryName', 'ca.categoryName', 'ct.categoryName', 'a.name', 'cs.name', 'ad.name', 'am.name'] };
         const filterData = prepareFilterData({ filters, searchText, other: other1, default_columns, custom_columns })
         const { select, where, values, join, other } = filterData;
+        const userId = Number(req.user.adminID || 0);
+        const visibilitySelect = getTicketVisibilitySelect(userId);
 
         if (client_id) {
             where.push(`client_id = ${client_id}`);
@@ -102,12 +179,18 @@ export const list = async (req, res) => {
 
         const shouldFilterByAssignee =
             !isSuperAdmin(req.user) &&
-            !(String(req.user.role_slug || "").toLowerCase() === "admin" && viewAll === "Y") &&
-            req.user.adminID;
+            !(isAdmin(req.user) && (viewAll === "Y" || getAll === "Y")) &&
+            userId;
 
-        if (shouldFilterByAssignee) {
-            where.push("t.assignee = ?");
-            values.push(req.user.adminID);
+        if (shouldFilterByAssignee && userId) {
+            where.push(`
+                (
+                    t.assignee = ?
+                    OR t.created_by = ?
+                    OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")}
+                )
+            `);
+            values.push(userId, userId, userId, userId, userId);
         }
 
         const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other });
@@ -119,10 +202,10 @@ export const list = async (req, res) => {
         let adminDetails = [];
         if (getAll === "Y") {
             let select1 = select + " , t.user_id as user_id, u.name as user_name,cs.customer_id as client_id,cs.name as client_name"
-            adminDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other });
+            adminDetails = await CommonModel.GetMasterListDetails({ select: `${select}${visibilitySelect}`, table: MODULE_TABLE, where, values, join, other });
         } else {
             let select1 = select + " , t.user_id as user_id, u.name as user_name,cs.customer_id as client_id,cs.name as client_name,";
-            adminDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, limit, start, join, other });
+            adminDetails = await CommonModel.GetMasterListDetails({ select: `${select}${visibilitySelect}`, table: MODULE_TABLE, where, values, limit, start, join, other });
         }
         return successResponse(res, {
             code: 1004,
@@ -162,7 +245,7 @@ export const getTicketDetails = async (req, res) => {
                 const next_id = await CommonModel.getNextID(MODULE_TABLE, 'ticket_id');
                 const active_amc = await resolveTicketActiveAmc(req.body.client_id);
                 data = await buildTablePayload(MODULE_TABLE, {
-                    ...req.body,
+                    ...prepareTicketBody(req.body),
                     active_amc,
                     created_by: req.user.adminID,
                     created_date: toMysqlDateTime(),
@@ -197,7 +280,7 @@ export const getTicketDetails = async (req, res) => {
                 }
                 const active_amc = req.body.client_id ? await resolveTicketActiveAmc(req.body.client_id) : undefined;
                 data = await buildTablePayload(MODULE_TABLE, {
-                    ...req.body,
+                    ...prepareTicketBody(req.body),
                     active_amc,
                     modified_by: req.user.adminID,
                     modified_date: toMysqlDateTime(),
@@ -207,8 +290,8 @@ export const getTicketDetails = async (req, res) => {
                 const old_assignee = old_details?.length > 0 ? old_details[0]?.old_assignee : null;
                 const old_ticket_status = old_details?.length > 0 ? old_details[0]?.old_ticket_status : null;
                 const old_due_date = old_details?.length > 0 ? old_details[0]?.old_due_date : null;
-                console.log('data : ' , data);
-                
+                console.log('data : ', data);
+
                 await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data, where: { ticket_id }, });
 
                 const modifiedByName = await CommonModel.getSpecificDetails('admin', 'name', { adminID: data.modified_by })

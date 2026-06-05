@@ -1,74 +1,74 @@
 import * as CommonModel from "../models/common.model.js";
 import { query, DB_PREFIX } from "../config/database.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
-
+import { getSummary } from "./reports.controller.js";
 // ======================================================
 // GET DEFINATIONS
 // ======================================================
 export const getDefinations = async (req, res) => {
-    try {
-        let { table, menu_id } = req.body;
+  try {
+    let { table, menu_id } = req.body;
 
-        if (!table) {
-            if (!menu_id) {
-                return failureResponse(res, {
-                    code: 2001,
-                    httpStatus: 400,
-                    message: "menu_id is required",
-                });
-            }
-
-            const moduleDetails = await CommonModel.getMasterDetails("menu_master", "*", { menu_id });
-
-            if (!moduleDetails.length) {
-                return failureResponse(res, {
-                    code: 2004,
-                    httpStatus: 404,
-                    message: "Menu not found",
-                });
-            }
-
-            table = moduleDetails[0].table_name;
-        }
-
-        if (!table) {
-            return failureResponse(res, {
-                code: 2001,
-                httpStatus: 400,
-                message: "Table is required",
-            });
-        }
-
-        const sql = `SHOW COLUMNS FROM ${DB_PREFIX}${table}`;
-        const rows = await query(sql);
-
-        if (rows.length) {
-            return successResponse(res, {
-                code: 1004,
-                httpStatus: 200,
-                data: {
-                    data: rows
-                },
-            });
-        }
-
+    if (!table) {
+      if (!menu_id) {
         return failureResponse(res, {
-            code: 2004,
-            httpStatus: 404,
-            message: "No definitions found",
+          code: 2001,
+          httpStatus: 400,
+          message: "menu_id is required",
         });
-    } catch (error) {
+      }
+
+      const moduleDetails = await CommonModel.getMasterDetails("menu_master", "*", { menu_id });
+
+      if (!moduleDetails.length) {
         return failureResponse(res, {
-            code: 2008,
-            httpStatus: 500,
-            message: error.message,
+          code: 2004,
+          httpStatus: 404,
+          message: "Menu not found",
         });
+      }
+
+      table = moduleDetails[0].table_name;
     }
+
+    if (!table) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Table is required",
+      });
+    }
+
+    const sql = `SHOW COLUMNS FROM ${DB_PREFIX}${table}`;
+    const rows = await query(sql);
+
+    if (rows.length) {
+      return successResponse(res, {
+        code: 1004,
+        httpStatus: 200,
+        data: {
+          data: rows
+        },
+      });
+    }
+
+    return failureResponse(res, {
+      code: 2004,
+      httpStatus: 404,
+      message: "No definitions found",
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
 };
 
 export const getFreeTextSearch = async (req, res) => {
   try {
-    const { text: searchText = "", type = "", tableName = "", wherec = "", list = "*", status = "false" } = req.body;
+    const { text: searchText = "", type = "", tableName = "", wherec = "", list = "*", status = "false", isCompanyWise = false } = req.body;
     const text = String(searchText).trim();
     const where = [];
     const values = [];
@@ -99,13 +99,96 @@ export const getFreeTextSearch = async (req, res) => {
     if (['customer', 'admin'].includes(tableName)) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
-    const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values});
+    if (isCompanyWise === true) {
+      where.push(`t.company_id = ${req.user.company_id} `);
+    }
+    const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values });
     if (result.length) {
       return successResponse(res, {
         code: 1004,
         httpStatus: 200,
         data: {
-            data : result
+          data: result
+        }
+      });
+    }
+    return failureResponse(res, {
+      code: 2004,
+      httpStatus: 404,
+      message: "No records found"
+    });
+
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message
+    });
+  }
+};
+export const getFreeTextAssignee = async (req, res) => {
+  try {
+    const { text: searchText = "", type = "", tableName = "", wherec = "", list = "*", status = "false", isCompanyWise = false } = req.body;
+    const text = String(searchText).trim();
+    const where = [];
+    const values = [];
+    const join = [];
+    const other = {};
+
+    // ===============================
+    // INPUT SEARCH
+    // ===============================
+    if (type === "input") {
+      if (!text) {
+        return failureResponse(res, {
+          code: 2001,
+          httpStatus: 400,
+          message: "Search text required"
+        });
+      }
+
+      where.push(`t.${wherec} LIKE ?`);
+      values.push(`%${text}%`);
+    }
+
+    // ===============================
+    // STATUS FILTER
+    // ===============================
+    if (String(status) === "true") {
+      where.push(`t.status = ?`);
+      values.push("active");
+    }
+    if (['customer', 'admin'].includes(tableName)) {
+      where.push(`t.company_id = ${req.user.company_id} `);
+    }
+    if (isCompanyWise === true) {
+      where.push(`t.company_id = ${req.user.company_id} `);
+    }
+    let select = list;
+
+    if (tableName === "admin") {
+      const companyId = Number(req.user.company_id || 0);
+      const ticketCompanyCondition = companyId ? ` AND pt.company_id = ${companyId}` : "";
+
+      join.push({
+        type: "LEFT JOIN",
+        table: "tickets",
+        alias: "pt",
+        key1: "adminID",
+        key2: "assignee",
+      });
+
+      select = `${list}, COALESCE(COUNT(CASE WHEN pt.status = 'active' AND pt.ticket_status <> '208'${ticketCompanyCondition} THEN pt.ticket_id END), 0) AS pending_tickets_count`;
+      other.groupBy = "t.adminID";
+    }
+
+    const result = await CommonModel.GetMasterListDetails({ select, table: tableName, where, values, join, other });
+    if (result.length) {
+      return successResponse(res, {
+        code: 1004,
+        httpStatus: 200,
+        data: {
+          data: result
         }
       });
     }
@@ -127,74 +210,12 @@ export const getFreeTextSearch = async (req, res) => {
 // ======================================================
 // GET SLUG LIST
 // ======================================================
-// export const getslugList = async (req, res) => {
-//     try {
-//         const { slug, status, category_id } = req.body;
-
-//         const where = {};
-//         const join = [];
-//         const other = { orderBy: "categories_index", order: "ASC" };
-
-//         if (status) {
-//             const statusStr = String(status).split(",").join('","');
-//             where["t.status"] = `IN ("${statusStr}")`;
-//         }
-
-//         if (slug) {
-//             const slugStr = String(slug).split(",").join('","');
-//             where["t.slug"] = `IN ("${slugStr}")`;
-//         }
-
-//         if (category_id) {
-//             const categoryStr = String(category_id).split(",").join('","');
-//             where["t.category_id"] = `IN ("${categoryStr}")`;
-//         }
-
-//         const categoryDetails = await CommonModel.GetMasterListDetails({select="category_id,slug,categoryName,parent_id,is_parent,categories_index", table="categories", where, values=[],limit= "", join, other});
-
-//         for (const row of categoryDetails) {
-//             const childWhere = {
-//                 "t.parent_id": `= "${row.category_id}"`,
-//                 "t.status": `IN ("active")`,
-//             };
-
-//             row.sublist = await CommonModel.GetMasterListDetails("category_id,slug,categoryName,parent_id,is_parent,categories_index,cat_color", "categories", childWhere, "", "", join, other);
-//         }
-
-//         if (categoryDetails.length) {
-//             return successResponse(res, {
-//                 code: 1004,
-//                 httpStatus: 200,
-//                 data: {
-//                     data: categoryDetails
-//                 },
-//             });
-//         }
-
-//         return failureResponse(res, {
-//             code: 2004,
-//             httpStatus: 404,
-//             message: "No records found",
-//         });
-//     } catch (error) {
-//         console.log(error);
-
-//         return failureResponse(res, {
-//             code: 2008,
-//             httpStatus: 500,
-//             message: error.message,
-//         });
-//     }
-// };
-
 export const getslugList = async (req, res) => {
   try {
-    const { slug = "", status = "", category_id = "" } = req.body;
-
+    const { slug = "", status = "", category_id = "" , isCompanyWise = false} = req.body;
     const where = [];
     const values = [];
     const join = [];
-
     const other = {
       orderBy: "t.categories_index",
       order: "ASC",
@@ -205,11 +226,9 @@ export const getslugList = async (req, res) => {
     // ===============================
     if (status) {
       const statusArr = String(status).split(",");
-
       where.push(
         `t.status IN (${statusArr.map(() => "?").join(",")})`
       );
-
       values.push(...statusArr);
     }
 
@@ -218,11 +237,9 @@ export const getslugList = async (req, res) => {
     // ===============================
     if (slug) {
       const slugArr = String(slug).split(",");
-
       where.push(
         `t.slug IN (${slugArr.map(() => "?").join(",")})`
       );
-
       values.push(...slugArr);
     }
 
@@ -231,12 +248,16 @@ export const getslugList = async (req, res) => {
     // ===============================
     if (category_id) {
       const catArr = String(category_id).split(",");
-
       where.push(
         `t.category_id IN (${catArr.map(() => "?").join(",")})`
       );
-
       values.push(...catArr);
+    }
+    if (isCompanyWise) {
+      const catArr = String(category_id).split(",");
+      req.user.company_id
+      where.push( `t.company_id`);
+      values.push(req.user.company_id);
     }
 
     // ===============================
@@ -282,7 +303,7 @@ export const getslugList = async (req, res) => {
       return successResponse(res, {
         code: 1004,
         httpStatus: 200,
-        data: {data : categoryDetails},
+        data: { data: categoryDetails },
       });
     }
 

@@ -637,6 +637,7 @@ const normalizeCustomerProducts = (value) => {
             product_id: item.product_id,
             product_name: item.product_name || "",
             serial_number: item.serial_number || "",
+            add_ons: normalizeAddOns(item.add_ons || item.addons || item.addOns),
           };
         }
 
@@ -644,12 +645,36 @@ const normalizeCustomerProducts = (value) => {
           product_id: item,
           product_name: "",
           serial_number: "",
+          add_ons: [],
         };
       })
       .filter((item) => item.product_id);
   }
 
   return [];
+};
+
+const normalizeAddOns = (value = []) => {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "object" && item !== null) {
+          return String(item.name || item.add_on_name || item.label || "").trim();
+        }
+
+        return String(item || "").trim();
+      })
+      .filter(Boolean);
+  }
+
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 };
 
 const parseCustomerProducts = (value) => {
@@ -663,4 +688,3 @@ const parseCustomerProducts = (value) => {
     return [];
   }
 };
-

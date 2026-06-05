@@ -221,7 +221,7 @@ const getCustomerReportTickets = async ({ body, user }) => {
   );
 };
 
-const getSummary = async ({ body, user }) => {
+export const getSummary = async ({ body, user }) => {
   const { whereSql, values } = buildTicketWhere({ body, user });
   const delegatedWhere = ["h.field_name = 'assignee'"];
   const delegatedValues = [];
