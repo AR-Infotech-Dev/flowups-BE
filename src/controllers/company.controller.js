@@ -46,7 +46,7 @@ const companyValidationRules = {
   email_app_password: { label: "App password" },
   mobile_number: { label: "Mobile Number" },
   company_address: { label: "Company Address" },
-  country: { label: "Country",  },
+  country: { label: "Country", },
   state: { label: "State", },
   city: { label: "City", },
   zip: { label: "Zip" },
@@ -337,7 +337,61 @@ export const uploadCompanyLogo = async (req, res) => {
     });
   }
 };
+export const removeCompanyLogo = async (req, res) => {
+  try {
+    const companyId = req.params.id;
+    const company = await CommonModel.getMasterDetails(MODULE_TABLE, "email_logo", {
+      company_id : companyId,
+    });
 
+    if (!company?.length) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "Company not found",
+      });
+    }
+
+    const logoPath = company[0].email_logo;
+
+    // Delete physical file if exists
+    if (logoPath) {
+      const absolutePath = path.join(process.cwd(), logoPath);
+
+      if (fs.existsSync(absolutePath)) {
+        fs.unlinkSync(absolutePath);
+      }
+    }
+
+    // Update DB
+    await CommonModel.updateMasterDetails({
+      table: MODULE_TABLE,
+      data: {
+        email_logo: null,
+        modified_by: req.user.adminID,
+        modified_date: toMysqlDateTime(),
+      },
+      where: { company_id: companyId },
+    });
+
+    // Clear mail cache
+    clearCompanyMailerCache(companyId);
+
+    return successResponse(res, {
+      code: 1003,
+      httpStatus: 200,
+      message: "Company logo removed successfully",
+      data: {},
+    });
+
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
 // ======================================================
 // CREATE / UPDATE / GET SINGLE
 // ======================================================

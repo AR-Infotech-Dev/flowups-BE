@@ -483,7 +483,7 @@ export const sendReminder = async (req, res) => {
       });
     }
 
-    // await insertReminderLog({ customer, user: req.user, includeReport, subject });
+    await insertReminderLog({ customer, user: req.user, includeReport, subject });
 
     return successResponse(res, {
       code: 1002,

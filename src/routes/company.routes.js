@@ -22,6 +22,7 @@ companyRoutes.post("/delete", requirePermission(['company-master', 'companies'],
 companyRoutes.post("/mail-config/test", requirePermission(['company-master', 'companies'], "edit"), companyController.testMailConfig);
 companyRoutes.post("/logo", requirePermission(['company-master', 'companies'], "create"), logoUpload.single("logo"), companyController.uploadCompanyLogo);
 companyRoutes.post("/:id/logo", requirePermission(['company-master', 'companies'], "edit"), logoUpload.single("logo"), companyController.uploadCompanyLogo);
+companyRoutes.delete("/:id/logo/remove", requirePermission(['company-master', 'companies'], "edit"), companyController.removeCompanyLogo);
 companyRoutes.put("/create", requirePermission(['company-master', 'companies'], "create"), companyController.getCompanyDetails);
 companyRoutes.get("/:id", requirePermission(['company-master', 'companies'], "view"), companyController.getCompanyDetails);
 companyRoutes.post("/:id", requirePermission(['company-master', 'companies'], "edit"), companyController.getCompanyDetails);
