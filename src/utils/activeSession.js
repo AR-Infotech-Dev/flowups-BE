@@ -45,12 +45,10 @@ export async function setActiveSessionId(adminID, activeSessionId, isMobile = fa
 }
 
 export async function getActiveSessionId(adminID,isMobile = false) {
-  await ensureActiveSessionColumn();
-
   const rows = await query(
     isMobile 
-    ?`SELECT active_session_id_mob FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`
-    :`SELECT active_session_id FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`,
+    ?`SELECT active_session_id_mob as active_session_id FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`
+    :`SELECT active_session_id as active_session_id FROM ${DB_PREFIX}admin WHERE adminID = ? LIMIT 1`,
     [adminID]
   );
 
