@@ -10,6 +10,7 @@ ticketRoutes.post('/', requirePermission('tickets', 'view'), ticketController.li
 ticketRoutes.post('/history', requirePermission('tickets', 'view'), ticketHistoryController.history);
 ticketRoutes.post('/work-logs', requirePermission('tickets', 'view'), ticketWorkLogsController.list);
 ticketRoutes.put('/work-logs/create', requirePermission('tickets', 'edit'), ticketWorkLogsController.create);
+ticketRoutes.post('/work-logs/update', requirePermission('tickets', 'edit'), ticketWorkLogsController.update);
 ticketRoutes.post('/delete', requirePermission('tickets', 'delete'), ticketController.changeStatus);
 ticketRoutes.put('/create', requirePermission('tickets', 'create'), ticketController.getTicketDetails);
 ticketRoutes.post('/update-status/:id', requirePermission('tickets', 'edit'), ticketController.updateStatus);

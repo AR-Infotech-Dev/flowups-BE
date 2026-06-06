@@ -10,6 +10,7 @@ import { DB_PREFIX } from "../config/database.js";
 import { createFeedbackToken } from "./feedback.controller.js";
 import { getIO } from "../socket/index.js";
 import { TICKET_NOTIFICATION } from "../utils/emailtemplates.js";
+import { hasActiveWorkLog } from "./ticketWorkLogs.controller.js";
 import { title } from "process";
 
 const MODULE_TABLE = "tickets"
@@ -199,12 +200,21 @@ export const list = async (req, res) => {
         let end = start + limit;
         if (end > total) end = total;
 
+        // join.push({
+        //     type: "LEFT JOIN",
+        //     table: 'ticket_work_logs',
+        //     alias: 'twl',
+        //     key1: 'ticket_id',
+        //     key2: 'ticket_id',
+        //     column: 'work_status'
+        // })
+
         let adminDetails = [];
         if (getAll === "Y") {
-            let select1 = select + " , t.user_id as user_id, u.name as user_name,cs.customer_id as client_id,cs.name as client_name"
+            let select1 = select + "cs.customer_id as client_id,cs.name as client_name,twl.work_status as work_status"
             adminDetails = await CommonModel.GetMasterListDetails({ select: `${select}${visibilitySelect}`, table: MODULE_TABLE, where, values, join, other });
         } else {
-            let select1 = select + " , t.user_id as user_id, u.name as user_name,cs.customer_id as client_id,cs.name as client_name,";
+            let select1 = select + " ,cs.customer_id as client_id,cs.name as client_name";
             adminDetails = await CommonModel.GetMasterListDetails({ select: `${select}${visibilitySelect}`, table: MODULE_TABLE, where, values, limit, start, join, other });
         }
         return successResponse(res, {
@@ -291,6 +301,17 @@ export const getTicketDetails = async (req, res) => {
                 const old_ticket_status = old_details?.length > 0 ? old_details[0]?.old_ticket_status : null;
                 const old_due_date = old_details?.length > 0 ? old_details[0]?.old_due_date : null;
                 console.log('data : ', data);
+
+                if (data?.assignee && Number(old_assignee) !== Number(data.assignee)) {
+                    const activeWorkLog = await hasActiveWorkLog(ticket_id);
+                    if (activeWorkLog) {
+                        return failureResponse(res, {
+                            code: 2000,
+                            httpStatus: 409,
+                            message: "Ticket work is already started. End the active work before reassigning.",
+                        });
+                    }
+                }
 
                 await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data, where: { ticket_id }, });
 
