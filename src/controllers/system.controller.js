@@ -2,6 +2,10 @@ import * as CommonModel from "../models/common.model.js";
 import { query, DB_PREFIX } from "../config/database.js";
 import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { getSummary } from "./reports.controller.js";
+
+const isSuperAdmin = (user = {}) => {
+  return String(user.role_slug || "").toLowerCase() === "super_admin";
+};
 // ======================================================
 // GET DEFINATIONS
 // ======================================================
@@ -96,10 +100,10 @@ export const getFreeTextSearch = async (req, res) => {
       where.push(`t.status = ?`);
       values.push("active");
     }
-    if (['customer', 'admin'].includes(tableName)) {
+    if (!isSuperAdmin(req.user) && ['customer', 'admin'].includes(tableName)) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
-    if (isCompanyWise === true) {
+    if (!isSuperAdmin(req.user) && isCompanyWise === true) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
     const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values });
@@ -158,10 +162,10 @@ export const getFreeTextAssignee = async (req, res) => {
       where.push(`t.status = ?`);
       values.push("active");
     }
-    if (['customer', 'admin'].includes(tableName)) {
+    if (!isSuperAdmin(req.user) && ['customer', 'admin'].includes(tableName)) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
-    if (isCompanyWise === true) {
+    if (!isSuperAdmin(req.user) && isCompanyWise === true) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
     let select = list;
@@ -212,7 +216,7 @@ export const getFreeTextAssignee = async (req, res) => {
 // ======================================================
 export const getslugList = async (req, res) => {
   try {
-    const { slug = "", status = "", category_id = "" , isCompanyWise = false} = req.body;
+    const { slug = "", status = "", category_id = "", isCompanyWise = false } = req.body;
     const where = [];
     const values = [];
     const join = [];
@@ -256,7 +260,7 @@ export const getslugList = async (req, res) => {
     if (isCompanyWise) {
       const catArr = String(category_id).split(",");
       req.user.company_id
-      where.push( `t.company_id`);
+      where.push(`t.company_id`);
       values.push(req.user.company_id);
     }
 

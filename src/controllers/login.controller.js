@@ -49,7 +49,7 @@ export const login = async (req, res) => {
     // ===============================
     const rows = await verifyUserDetails(username);
     const user = rows[0];
-    
+
     if (!user) {
       return failureResponse(res, {
         code: 2002,
@@ -93,8 +93,9 @@ export const login = async (req, res) => {
     // GENERATE TOKEN
     // ===============================
     const companyId = user.company_id || user.default_company || null;
+    const company_name = user.company_name || null;
     const activeSessionId = createActiveSessionId();
-    await setActiveSessionId(user.adminID, activeSessionId,isMobile);
+    await setActiveSessionId(user.adminID, activeSessionId, isMobile);
 
     const token = jwt.sign(
       {
@@ -103,6 +104,7 @@ export const login = async (req, res) => {
         roleID: user.roleID,
         role_slug: user.role_slug,
         company_id: companyId,
+        company_name: company_name,
         active_session_id: activeSessionId,
       },
       env.jwtSecret,
@@ -126,6 +128,7 @@ export const login = async (req, res) => {
             userName: user.userName,
             roleID: user.roleID,
             company_id: companyId,
+            company_name: company_name,
             role_slug: user.role_slug,
           },
         },
@@ -149,6 +152,7 @@ export const login = async (req, res) => {
           userName: user.userName,
           roleID: user.roleID,
           company_id: companyId,
+          company_name: company_name,
           role_slug: user.role_slug,
         },
       },

@@ -79,6 +79,7 @@ const userSchema = Joi.object({
 
   otp_exp_time: Joi.date().allow(null),
   active_session_id: Joi.string().allow(null),
+  active_session_id_mob: Joi.string().allow(null),
 
   created_date: Joi.date().allow(null),
   modified_date: Joi.date().allow(null),
