@@ -200,6 +200,7 @@ const getCustomerReportCustomer = async ({ customerId, user }) => {
         c.wa_no,
         c.contact_person,
         c.company_name,
+        c.company_id,
         c.is_amc,
         c.amc_start_date,
         c.amc_end_date,
@@ -789,8 +790,6 @@ const escapeHtml = (value = "") =>
 export const sendReport = async (req, res) => {
   try {
     const customerId = req.body.customer_id || req.body.customerId;
-    // const includeReport = req.body.include_report === true || req.body.includeReport === true;
-
     if (!customerId) {
       return failureResponse(res, { code: 2001, httpStatus: 400, message: "customer_id is required" });
     }
@@ -798,25 +797,23 @@ export const sendReport = async (req, res) => {
       ...req.body,
       customer_id: customerId,
     };
-
     const [customer, summary, tickets] = await Promise.all([
       getCustomerReportCustomer({ customerId, user: req.user }),
       getCustomerReportSummary({ body: normalizedBody, user: req.user }),
       getCustomerReportTickets({ body: normalizedBody, user: req.user }),
     ]);
-
     if (!customer?.customer_id) {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "Customer not found" });
     }
-
     if (!customer.email) {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "Customer email not found" });
     }
     const products = customer.customer_products || [];
     const supportRows = tickets;
     const subject = `Support Report - ${customer.name || "Customer"}`;
-    const html = buildSupportReportTemplate({ customer, supportCallCount: supportRows.length ,summary,products});
-    const attachments = [buildReportAttachment({ customer, summary, supportRows,  })];
+    const html = await buildSupportReportTemplate({ customer, supportCallCount: supportRows.length, summary, products });
+    const attachments = [await buildReportAttachment({ customer, summary, supportRows, })];
+    // SEND EMAIL To Customer 
     const result = await sendEmail({
       to: customer.email,
       subject,
@@ -842,9 +839,7 @@ export const sendReport = async (req, res) => {
         message: result.error || "Email sending failed",
       });
     }
-
     // await insertReminderLog({ customer, user: req.user, includeReport, subject });
-
     return successResponse(res, {
       code: 1002,
       httpStatus: 200,

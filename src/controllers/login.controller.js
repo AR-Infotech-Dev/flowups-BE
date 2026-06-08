@@ -6,7 +6,7 @@ import { successResponse, failureResponse } from "../utils/apiResponse.js";
 import { validateBody } from "../utils/bodyValidator.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { sendEmail } from "../utils/email.js";
-import { AUTH_FORGOT_PASSWORD_OTP, AUTH_PASSWORD_UPDATED } from "../utils/emailtemplates.js";
+import { renderTemplate } from "../utils/templateMaker.js";
 import { hashPassword, isPasswordHash, verifyPassword } from "../utils/password.js";
 import { createActiveSessionId, setActiveSessionId } from "../utils/activeSession.js";
 import { decryptLoginPassword, getLoginPublicKey } from "../utils/loginEncryption.js";
@@ -219,7 +219,7 @@ export const forgotPassword = async (req, res) => {
       modified_date: toMysqlDateTime(),
     });
     // console.log('sql : ',sql);
-    const template = AUTH_FORGOT_PASSWORD_OTP({
+    const template = await renderTemplate("forgotPasswordOtp", "email", {
       name: user.name || user.userName || "User",
       otp,
     });
@@ -301,7 +301,7 @@ export const verifyForgotPassword = async (req, res) => {
       modified_date: toMysqlDateTime(),
     });
 
-    const template = AUTH_PASSWORD_UPDATED({
+    const template = await renderTemplate("passwordUpdated", "email", {
       name: user.name || user.userName || "User",
     });
 

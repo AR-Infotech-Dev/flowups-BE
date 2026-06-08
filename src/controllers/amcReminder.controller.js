@@ -2,7 +2,14 @@ import { DB_PREFIX, query } from "../config/database.js";
 import { failureResponse, successResponse } from "../utils/apiResponse.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { sendEmail } from "../utils/email.js";
-import { AMC_RENEWAL_REMINDER } from "../utils/emailtemplates.js";
+import { renderTemplate } from "../utils/templateMaker.js"
+
+import {
+  buildExcelAttachment,
+  buildSheetSpacerRow,
+  buildSideBySideRows,
+  excelFormat
+} from "../utils/excel.utils.js";
 
 const LIMIT = 10;
 
@@ -32,14 +39,6 @@ const formatDate = (value = null) => {
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
-
-const escapeHtml = (value = "") =>
-  String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 
 const ensureReminderTable = async () => {
   await query(`
@@ -122,7 +121,6 @@ const getSupportCallRows = async (customerId, amcStartDate, amcEndDate) => {
     where.push("DATE(t.created_date) BETWEEN DATE(?) AND DATE(?)");
     values.push(amcStartDate, amcEndDate);
   }
-
   return query(
     `
       SELECT
@@ -147,11 +145,10 @@ const getSupportCallRows = async (customerId, amcStartDate, amcEndDate) => {
   );
 };
 
-const buildReportAttachment = (customer = {}, supportRows = []) => {
+const buildReportAttachment = async (customer = {}, supportRows = []) => {
   const isResolvedStatus = (row = {}) => {
     const statusId = String(row.ticket_status_id || "").trim();
     const statusName = String(row.ticket_status || "").trim().toLowerCase();
-
     return (
       statusId === "208" ||
       statusName.includes("resolve") ||
@@ -159,113 +156,61 @@ const buildReportAttachment = (customer = {}, supportRows = []) => {
       statusName.includes("complete")
     );
   };
-
+  const spreadsheetColumnCount = 10;
   const totalCalls = supportRows.length;
   const resolvedCalls = supportRows.filter(isResolvedStatus).length;
   const pendingCalls = Math.max(0, totalCalls - resolvedCalls);
-  const rows = supportRows.length
-    ? supportRows.map((row, index) => {
-      const resolved = isResolvedStatus(row);
-
-      return `
-        <tr>
-          <td class="center">${index + 1}</td>
-          <td>${escapeHtml(row.ticket_no || "-")}</td>
-          <td>${escapeHtml(row.created_date || "-")}</td>
-          <td>${escapeHtml(row.due_date || "-")}</td>
-          <td>${escapeHtml(row.query_type || "-")}</td>
-          <td class="${resolved ? "status-resolved" : "status-pending"}">${escapeHtml(row.ticket_status || "-")}</td>
-          <td>${escapeHtml(row.ticket_priority || "-")}</td>
-          <td>${escapeHtml(row.assignee || "-")}</td>
-        </tr>
-      `;
-    }).join("")
-    : `<tr><td colspan="8" class="empty">No support calls found for this AMC period.</td></tr>`;
-
-  const html = `
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <style>
-          body { font-family: Arial, Helvetica, sans-serif; color: #172033; }
-          h2 { margin: 0 0 6px; color: #003b7d; font-size: 20px; }
-          .muted { color: #64748b; font-size: 12px; }
-          .summary { margin: 16px 0; border-collapse: collapse; width: 100%; }
-          .summary td { border: 1px solid #dbeafe; padding: 10px 14px; font-size: 13px; }
-          .summary-label { background: #eff6ff; color: #475569; font-weight: 700; }
-          .summary-value { font-weight: 800; color: #0f172a; }
-          .metric-total { background: #e0f2fe; color: #075985; }
-          .metric-resolved { background: #dcfce7; color: #166534; }
-          .metric-pending { background: #fef3c7; color: #92400e; }
-          table.report { border-collapse: collapse; width: 100%; margin-top: 12px; }
-          .report th { background: #003b7d; color: #ffffff; border: 1px solid #003b7d; padding: 9px 8px; font-size: 12px; text-align: left; }
-          .report td { border: 1px solid #dbe3ef; padding: 8px; font-size: 12px; vertical-align: top; }
-          .report tr:nth-child(even) td { background: #f8fbff; }
-          .center { text-align: center; }
-          .status-resolved { color: #166534; background: #dcfce7; font-weight: 700; }
-          .status-pending { color: #92400e; background: #fef3c7; font-weight: 700; }
-          .empty { text-align: center; color: #64748b; background: #f8fbff; }
-        </style>
-      </head>
-      <body>
-        <h2>AMC Support Report</h2>
-        <div class="muted">Generated for ${escapeHtml(customer.name || "Customer")}</div>
-
-        <table class="summary" cellspacing="0" cellpadding="0">
-          <tr>
-            <td class="summary-label">Customer</td>
-            <td class="summary-value">${escapeHtml(customer.name || "-")}</td>
-            <td class="summary-label">Company</td>
-            <td class="summary-value">${escapeHtml(customer.company_name || "-")}</td>
-          </tr>
-          <tr>
-            <td class="summary-label">AMC Start</td>
-            <td class="summary-value">${escapeHtml(formatDate(customer.amc_start_date))}</td>
-            <td class="summary-label">AMC Expiry</td>
-            <td class="summary-value">${escapeHtml(formatDate(customer.amc_end_date))}</td>
-          </tr>
-          <tr>
-            <td class="summary-label metric-total">Total Calls</td>
-            <td class="summary-value metric-total">${totalCalls}</td>
-            <td class="summary-label metric-resolved">Resolved</td>
-            <td class="summary-value metric-resolved">${resolvedCalls}</td>
-          </tr>
-          <tr>
-            <td class="summary-label metric-pending">Pending</td>
-            <td class="summary-value metric-pending">${pendingCalls}</td>
-            <td class="summary-label">Report Type</td>
-            <td class="summary-value">AMC Period Support Summary</td>
-          </tr>
-        </table>
-
-        <table class="report" cellspacing="0" cellpadding="0">
-          <thead>
-            <tr>
-              <th style="width:45px;text-align:center;background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Sr No</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Ticket No</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Created Date</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Due Date</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Query Type</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Status</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Priority</th>
-              <th style="background:#003b7d;color:#ffffff;border:1px solid #003b7d;">Assignee</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </body>
-    </html>
-  `;
-
-  return {
-    filename: `AMC-Support-Report-${customer.customer_id}.xls`,
-    content: html,
-    contentType: "application/vnd.ms-excel",
-  };
+  const htmlBody = await renderTemplate(
+    "amcSupport",
+    "excel",
+    {
+      spreadsheetColumnCount,
+      customerName: customer.name || "-",
+      spacerRow1: await buildSheetSpacerRow(18, spreadsheetColumnCount),
+      spacerRow2: await buildSheetSpacerRow(28, spreadsheetColumnCount),
+      summarySection: await buildSideBySideRows({
+        leftTitle: "Summary",
+        leftData: {
+          total_calls: totalCalls,
+          resolved_calls: resolvedCalls,
+          pending_calls: pendingCalls,
+        },
+        rightTitle: "Report Details",
+        rightData: {
+          customer: customer.name || "-",
+          amc_start_date: formatDate(customer.amc_start_date),
+          amc_expiry_date: formatDate(customer.amc_end_date),
+          generated_on: formatDate(new Date()),
+        },
+        gapCols: 2,
+        labelColspan: 2,
+        valueColspan: 2,
+      }),
+      hasSupportRows: supportRows.length > 0,
+      supportRows: supportRows.map(
+        (row, index) => ({
+          srNo: index + 1,
+          ticket_no: row.ticket_no || "-",
+          created_date: row.created_date || "-",
+          due_date: row.due_date || "-",
+          query_type: row.query_type || "-",
+          ticket_status: row.ticket_status || "-",
+          ticket_priority: row.ticket_priority || "-",
+          assignee: row.assignee || "-",
+          statusClass: isResolvedStatus(row)
+              ? "excel-status-closed"
+              : "excel-status-open",
+        })
+      ),
+    }
+  );
+  const html = await excelFormat(htmlBody);
+  return buildExcelAttachment({
+    filename: `AMC-Support-Report-${customer.name || "customer"}.xls`,
+    html: html,
+  });
 };
-
 const insertReminderLog = async ({ customer, user, includeReport, subject, status = "sent", errorMessage = null }) => {
-  // await ensureReminderTable();
   await query(
     `
       INSERT INTO ${DB_PREFIX}amc_reminder_logs
@@ -287,8 +232,6 @@ const insertReminderLog = async ({ customer, user, includeReport, subject, statu
 };
 
 const hasReminderSentToday = async (customerId) => {
-  // await ensureReminderTable();
-
   const rows = await query(
     `
       SELECT reminder_id
@@ -450,13 +393,14 @@ export const sendReminder = async (req, res) => {
 
     const supportRows = await getSupportCallRows(customer.customer_id, customer.amc_start_date, customer.amc_end_date);
     const subject = `AMC renewal reminder - ${customer.name || "Customer"}`;
-    const html = AMC_RENEWAL_REMINDER({
-      customerName: escapeHtml(customer.name || "Customer"),
-      amcStartDate: escapeHtml(formatDate(customer.amc_start_date)),
-      amcEndDate: escapeHtml(formatDate(customer.amc_end_date)),
+    const html = await renderTemplate("amcRenewalReminder", "email", {
+      customerName: customer.name || "Customer",
+      amcStartDate: formatDate(customer.amc_start_date),
+      amcEndDate: formatDate(customer.amc_end_date),
       supportCallCount: supportRows.length,
     });
-    const attachments = includeReport ? [buildReportAttachment(customer, supportRows)] : [];
+    const attachment = await buildReportAttachment(customer, supportRows);
+    const attachments = includeReport ? [attachment] : [];
     const result = await sendEmail({
       to: customer.email,
       subject,

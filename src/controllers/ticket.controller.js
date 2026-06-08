@@ -9,7 +9,7 @@ import { env } from "../config/env.js";
 import { DB_PREFIX } from "../config/database.js";
 import { createFeedbackToken } from "./feedback.controller.js";
 import { getIO } from "../socket/index.js";
-import { TICKET_NOTIFICATION } from "../utils/emailtemplates.js";
+import { renderTemplate } from "../utils/templateMaker.js";
 import { hasActiveWorkLog } from "./ticketWorkLogs.controller.js";
 import { title } from "process";
 
@@ -504,7 +504,7 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
             return failureResponse(res, { code: 2004, httpStatus: 404, message: "Client email not found", });
         }
 
-        const template = TICKET_NOTIFICATION({
+        const template = await renderTemplate("ticketNotification", "email", {
             clientName,
             ticketNo: ticket_no,
             subject: subject || "Ticket Notification",

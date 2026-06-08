@@ -9,7 +9,7 @@ import commentsRoutes from "./comments.routes.js";
 import categoryRoutes from "./category.routes.js";
 import notificationRoutes from "./notification.routes.js";
 import feedbackRoutes from "./feedback.routes.js";
-import customerRoutes from "./customer.routes.js";
+import customerRoutes from "../modules/customer/customer.routes.js";
 import companyRoutes from "./company.routes.js";
 import productRoutes from "./product.routes.js";
 import moduleAccessRoutes from "./moduleAccess.routes.js";

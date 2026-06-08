@@ -7,7 +7,7 @@ import { buildTablePayload } from "../utils/tablePayload.js";
 import Joi from "joi";
 import { sendEmail } from "../utils/email.js";
 import { env } from "../config/env.js";
-import { USER_ACCOUNT_CREDENTIALS } from "../utils/emailtemplates.js";
+import { renderTemplate } from "../utils/templateMaker.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 
 const MODULE_TABLE = "admin";
@@ -288,7 +288,7 @@ export const getAdminDetails = async (req, res) => {
           data,
         });
 
-        const template = USER_ACCOUNT_CREDENTIALS({
+        const template = await renderTemplate("userAccountCredentials", "email", {
           name: data.name,
           userName: data.userName,
           password: plainPassword,
