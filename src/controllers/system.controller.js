@@ -168,7 +168,11 @@ export const getFreeTextAssignee = async (req, res) => {
     if (!isSuperAdmin(req.user) && isCompanyWise === true) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
-    let select = list;
+    let sel = list.split(',')
+      .map(item => `t.${item}`)
+      .join(',');
+
+    let select = sel;
 
     if (tableName === "admin") {
       const companyId = Number(req.user.company_id || 0);
@@ -182,10 +186,9 @@ export const getFreeTextAssignee = async (req, res) => {
         key2: "assignee",
       });
 
-      select = `${list}, COALESCE(COUNT(CASE WHEN pt.status = 'active' AND pt.ticket_status <> '208'${ticketCompanyCondition} THEN pt.ticket_id END), 0) AS pending_tickets_count`;
+      select = `${select}, COALESCE(COUNT(CASE WHEN pt.status = 'active' AND pt.ticket_status <> '208'${ticketCompanyCondition} THEN pt.ticket_id END), 0) AS pending_tickets_count`;
       other.groupBy = "t.adminID";
     }
-
     const result = await CommonModel.GetMasterListDetails({ select, table: tableName, where, values, join, other });
     if (result.length) {
       return successResponse(res, {

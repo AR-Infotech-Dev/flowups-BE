@@ -511,6 +511,61 @@ export const updateLocation = async (req, res) => {
     });
   }
 }
+export const updateStatus = async (req, res) => {
+  try {
+    const adminID = req.user?.adminID;
+    const status = req.body?.status;
+
+    if (!adminID) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    if (status === undefined || status === "") {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Status are required",
+      });
+    }
+
+    const data = sanitizeSqlPayload(await buildTablePayload(MODULE_TABLE, {
+      status,
+      modified_by: adminID,
+      modified_date: toMysqlDateTime(),
+    }));
+
+    const result = await CommonModel.updateMasterDetails({
+      table: MODULE_TABLE,
+      data,
+      where: { adminID },
+    });
+
+    if (!result.affectedRows) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      });
+    }
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: "Status updated successfully",
+      data: [],
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}
 
 export const getMarkers = async (req, res) => {
   try {

@@ -6,6 +6,8 @@ import { buildTablePayload } from "../utils/tablePayload.js";
 
 const MODULE_TABLE = "ticket_work_logs";
 
+const currentDateTime = toMysqlDateTime();
+
 const toMinutes = (value = 0) => {
     const minutes = Number(value || 0);
     return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 0;
@@ -115,7 +117,7 @@ export const create = async (req, res) => {
     try {
         const ticketId = req.body.ticket_id;
         const ticket = await getTicket(ticketId);
-
+        //TICKET REQUIRED
         if (!ticket) {
             return failureResponse(res, {
                 code: 2004,
@@ -123,7 +125,7 @@ export const create = async (req, res) => {
                 message: "Ticket not found",
             });
         }
-
+        // ONLY ASSIGNEE IS ALLOWED
         if (!canAddWorkLog(ticket, req.user)) {
             return failureResponse(res, {
                 code: 2003,
@@ -131,19 +133,7 @@ export const create = async (req, res) => {
                 message: "Only current assignee can add work log",
             });
         }
-        console.log('data : 1 :',req.body);
-        
-        if (!req.body.work_start_at) {
-            return failureResponse(res, {
-                code: 2000,
-                httpStatus: 400,
-                message: "work_start_at is required",
-            });
-        }
-        console.log('data : 2 :',req.body);
-        
         const activeWorkLog = await findActiveWorkLog(ticketId);
-        console.log('activeWorkLog :',activeWorkLog);
         if (activeWorkLog) {
             return failureResponse(res, {
                 code: 2000,
@@ -151,20 +141,18 @@ export const create = async (req, res) => {
                 message: "Work already started for this ticket",
             });
         }
-        console.log('data : 3 :',req.body);
 
         const data = await buildTablePayload(MODULE_TABLE, {
             ticket_id: ticketId,
             employee_id: req.user.adminID,
             company_id: ticket.company_id || req.user.company_id,
-            work_start_at: req.body.work_start_at,
+            work_start_at: toMysqlDateTime() ,//req.body.work_start_at,
             work_status: req.body.work_status || "working",
             created_by: req.user.adminID,
             created_date: toMysqlDateTime(),
             status: "active",
         });
 
-        
         const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data });
 
         return successResponse(res, {
@@ -188,7 +176,7 @@ export const update = async (req, res) => {
         const ticketId = req.body.ticket_id;
         const workLogId = req.body.work_log_id;
         const ticket = await getTicket(ticketId);
-
+        // TICKET NOT FOUND
         if (!ticket) {
             return failureResponse(res, {
                 code: 2004,
@@ -196,7 +184,7 @@ export const update = async (req, res) => {
                 message: "Ticket not found",
             });
         }
-
+        // ALLOWED ONLY ASSIGNEE
         if (!canAddWorkLog(ticket, req.user)) {
             return failureResponse(res, {
                 code: 2003,
@@ -205,11 +193,11 @@ export const update = async (req, res) => {
             });
         }
 
-        if (!workLogId || !req.body.work_end_at || !String(req.body.work_details || "").trim()) {
+        if (!workLogId || !String(req.body.work_details || "").trim()) {
             return failureResponse(res, {
                 code: 2000,
                 httpStatus: 400,
-                message: "work_log_id, work_end_at and work_details are required",
+                message: "work_log_id and work_details are required",
             });
         }
 
@@ -236,7 +224,9 @@ export const update = async (req, res) => {
             });
         }
 
-        const spentMinutes = toMinutes(req.body.spent_minutes) || calculateSpentMinutes(workLog.work_start_at, req.body.work_end_at);
+        const spentMinutes = calculateSpentMinutes(workLog.work_start_at, currentDateTime);
+        console.log('spentMinutes : ',spentMinutes);
+        
         if (!spentMinutes) {
             return failureResponse(res, {
                 code: 2000,
@@ -246,7 +236,7 @@ export const update = async (req, res) => {
         }
 
         const data = await buildTablePayload(MODULE_TABLE, {
-            work_end_at: req.body.work_end_at,
+            work_end_at: toMysqlDateTime() , //req.body.work_end_at,
             spent_minutes: spentMinutes,
             work_details: String(req.body.work_details || "").trim(),
             work_status: req.body.work_status || "completed",

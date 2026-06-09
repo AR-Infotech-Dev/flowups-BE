@@ -9,6 +9,8 @@ export const customerValidationRules = {
   pan_number: { label: "PAN Number" },
   gst_number: { label: "GST Number" },
   company_id: { label: "Company", type: "number" },
+  exp_call_count: { label: "Expected calls", type: "number" },
+  responsible_person: { label: "Responsible Person", type: "number" },
   product_ids: { label: "Products" },
   customer_products: { label: "Customer Products" },
   is_amc: { label: "Is AMC" },

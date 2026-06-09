@@ -1,3 +1,5 @@
+import { response } from "express";
+
 export const defaultColumns = {};
 
 export const customColumns = {
@@ -11,6 +13,13 @@ export const customColumns = {
   created_by: {
     table: "admin",
     alias: "ad",
+    column: "name",
+    key2: "adminID",
+    select: "",
+  },
+  responsible_person: {
+    table: "admin",
+    alias: "rp",
     column: "name",
     key2: "adminID",
     select: "",

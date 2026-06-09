@@ -61,6 +61,7 @@ export const normalizeCustomerProducts = (value) => {
             product_id: item.product_id,
             product_name: item.product_name || "",
             serial_number: item.serial_number || "",
+            expiry_date: item.expiry_date || "",
             add_ons: normalizeAddOns(item.add_ons || item.addons || item.addOns),
           };
         }
@@ -69,6 +70,7 @@ export const normalizeCustomerProducts = (value) => {
           product_id: item,
           product_name: "",
           serial_number: "",
+          expiry_date: "",
           add_ons: [],
         };
       })
@@ -149,6 +151,7 @@ const buildCustomerProductsFromImport = (productIdsValue, serialNumbersValue) =>
   return productIds.map((product_id, index) => ({
     product_id,
     product_name: "",
+    expiry_date: "",
     serial_number: serialNumbers[index] || "",
   }));
 };
