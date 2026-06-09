@@ -223,7 +223,8 @@ export const update = async (req, res) => {
                 message: "Work log already ended",
             });
         }
-
+        console.log('workLog.work_start_at, currentDateTime : ',workLog.work_start_at, currentDateTime);
+        
         const spentMinutes = calculateSpentMinutes(workLog.work_start_at, currentDateTime);
         console.log('spentMinutes : ',spentMinutes);
         
