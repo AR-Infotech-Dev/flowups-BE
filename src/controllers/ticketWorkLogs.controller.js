@@ -6,7 +6,6 @@ import { buildTablePayload } from "../utils/tablePayload.js";
 
 const MODULE_TABLE = "ticket_work_logs";
 
-const currentDateTime = toMysqlDateTime();
 
 const toMinutes = (value = 0) => {
     const minutes = Number(value || 0);
@@ -27,10 +26,8 @@ const canAddWorkLog = (ticket = {}, user = {}) => {
 };
 
 const findActiveWorkLog = async (ticketId = null) => {
-    console.log('adasdada');
-    
     if (!ticketId) return null;
-    
+
     const rows = await query(
         `
         SELECT *
@@ -45,8 +42,6 @@ const findActiveWorkLog = async (ticketId = null) => {
         `,
         [ticketId]
     );
-    console.log('rows?.[0] L : ',rows?.[0]);
-    
     return rows?.[0] || null;
 };
 
@@ -146,7 +141,7 @@ export const create = async (req, res) => {
             ticket_id: ticketId,
             employee_id: req.user.adminID,
             company_id: ticket.company_id || req.user.company_id,
-            work_start_at: toMysqlDateTime() ,//req.body.work_start_at,
+            work_start_at: toMysqlDateTime(),//req.body.work_start_at,
             work_status: req.body.work_status || "working",
             created_by: req.user.adminID,
             created_date: toMysqlDateTime(),
@@ -173,6 +168,7 @@ export const create = async (req, res) => {
 
 export const update = async (req, res) => {
     try {
+        const currentDateTime = toMysqlDateTime();
         const ticketId = req.body.ticket_id;
         const workLogId = req.body.work_log_id;
         const ticket = await getTicket(ticketId);
@@ -223,21 +219,17 @@ export const update = async (req, res) => {
                 message: "Work log already ended",
             });
         }
-        console.log('workLog.work_start_at, currentDateTime : ',workLog.work_start_at, currentDateTime);
-        
         const spentMinutes = calculateSpentMinutes(workLog.work_start_at, currentDateTime);
-        console.log('spentMinutes : ',spentMinutes);
-        
         if (!spentMinutes) {
             return failureResponse(res, {
                 code: 2000,
                 httpStatus: 400,
-                message: "work_end_at must be after work_start_at",
+                message: "Work should be taken more than 1 minute",
             });
         }
 
         const data = await buildTablePayload(MODULE_TABLE, {
-            work_end_at: toMysqlDateTime() , //req.body.work_end_at,
+            work_end_at: toMysqlDateTime(), //req.body.work_end_at,
             spent_minutes: spentMinutes,
             work_details: String(req.body.work_details || "").trim(),
             work_status: req.body.work_status || "completed",
