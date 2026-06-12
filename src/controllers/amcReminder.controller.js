@@ -5,7 +5,8 @@ import { buildTablePayload } from "../utils/tablePayload.js";
 import { toMysqlDateTime } from "../utils/dateTime.js";
 import { sendEmail } from "../utils/email.js";
 import { renderTemplate } from "../utils/templateMaker.js"
-
+import { env } from "../config/env.js";
+import crypto from "crypto";
 import {
   buildExcelAttachment,
   buildSheetSpacerRow,
@@ -14,7 +15,9 @@ import {
 } from "../utils/excel.utils.js";
 
 const LIMIT = 10;
-
+const createVisitToken = () => {
+  return crypto.randomBytes(32).toString("hex");
+};
 const isSuperAdmin = (user = {}) => String(user.role_slug || "").toLowerCase() === "super_admin";
 const isAdmin = (user = {}) => String(user.role_slug || "").toLowerCase() === "admin";
 
@@ -110,10 +113,10 @@ const buildBaseWhere = ({ user = {}, searchText = "", filters = [] } = {}) => {
     where.push("c.company_id = ?");
     values.push(user.company_id);
   }
-  
+
   if (!isAdmin(user) && !isSuperAdmin(user)) {
     where.push("c.responsible_person = ?");
-    
+
     values.push(user.adminID);
   }
 
@@ -209,6 +212,14 @@ const getSupportCallRows = async (customerId, amcStartDate, amcEndDate) => {
       ORDER BY t.created_date ASC
     `,
     values
+  );
+};
+const getTicket = async (ticketId = null) => {
+  if (!ticketId) return null;
+  return await CommonModel.getSpecificDetails(
+    "tickets",
+    "ticket_id, ticket_no, client_id, assignee, company_id, created_by, status",
+    { ticket_id: ticketId }
   );
 };
 const buildReportAttachment = async (customer = {}, supportRows = []) => {
@@ -311,6 +322,73 @@ const hasReminderSentToday = async (customerId) => {
 
   return rows.length > 0;
 };
+const notifyVisitScheduled = async ({ ticket = {}, visit = {}, visitId = null } = {}) => {
+  const rows = await query(
+    `
+        SELECT
+            t.ticket_id,
+            t.ticket_no,
+            t.company_id,
+            t.created_by,
+            t.assignee,
+            DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date,
+            DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date,
+            c.name AS clientName,
+            c.email,
+            qt.categoryName AS query_type,
+            ts.categoryName AS ticket_status,
+            tp.categoryName AS ticket_priority,
+            a.name AS assignedTo
+        FROM ${DB_PREFIX}tickets t
+        LEFT JOIN ${DB_PREFIX}customer c ON t.client_id = c.customer_id
+        LEFT JOIN ${DB_PREFIX}categories qt ON t.query_type = qt.category_id
+        LEFT JOIN ${DB_PREFIX}categories ts ON t.ticket_status = ts.category_id
+        LEFT JOIN ${DB_PREFIX}categories tp ON t.ticket_priority = tp.category_id
+        LEFT JOIN ${DB_PREFIX}admin a ON t.assignee = a.adminID
+        WHERE t.ticket_id = ?
+        LIMIT 1
+        `,
+    [ticket.ticket_id]
+  );
+  const details = rows?.[0] || {};
+  const visitDateTime = formatDate(visit.visit_scheduled_at);
+  const title = "AMC Visit Scheduled";
+  const body = `AMC Visit scheduled for ticket ${details.ticket_no || ticket.ticket_no || ticket.ticket_id} on ${visitDateTime}.`;
+
+  // emitNotification(details.assignee, { title, body, type: "visit", ticket_id: ticket.ticket_id, visit_id: visitId });
+  // if (details.created_by && Number(details.created_by) !== Number(details.assignee)) { emitNotification(details.created_by, { title, body, type: "visit", ticket_id: ticket.ticket_id, visit_id: visitId }); }
+  // if (!details.email) return { email_sent: false };
+
+  const visit_token = createVisitToken();
+  await CommonModel.updateMasterDetails({ table: 'ticket_visits', data: { visit_token }, where: { visit_id: visitId }, });
+  const visit_mark_url = `${env.appFEUrl}/mark_visit/${visitId}/${visit_token}`;
+  const html = await renderTemplate("ticketNotification", "email", {
+    clientName: details.clientName || "Customer",
+    ticketNo: details.ticket_no || ticket.ticket_id,
+    subject: "AMC Visit Scheduled",
+    createdDate: details.created_date || "-",
+    dueDate: details.due_date || "-",
+    assignedTo: details.assignedTo || "-",
+    message: `Your amc visit has been scheduled on ${visitDateTime}.${visit.visit_details ? `\n Details: ${visit.visit_details}` : ""}.${details.assignedTo ? `\n Visitor : ${details.assignedTo}` : ""}`,
+    category: details.query_type || "-",
+    status: details.ticket_status || "-",
+    priority: details.ticket_priority || "-",
+    appName: env?.appName || "Support System",
+    redirectUrl: visit_mark_url,
+    redirectUrlText: 'Mark as Visited'
+  });
+
+  const emailResult = await sendEmail({
+    to: details.email,
+    subject: `AMC Visit Scheduled - ${details.ticket_no || `Ticket #${ticket.ticket_id}`}`,
+    html,
+    text: "",
+    company_id: details.company_id || ticket.company_id,
+  });
+
+  return { email_sent: Boolean(emailResult?.success) };
+};
+
 export const createAmcCall = async (req, res) => {
   try {
     const customerId = req.body.customer_id || req.body.customerId || req.body.client_id;
@@ -432,6 +510,7 @@ export const createAmcVisit = async (req, res) => {
     const ticketData = await buildTablePayload(MODULE_TABLE, ticketSource);
     const ticketResult = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data: ticketData });
     const ticketId = ticketResult.insertId;
+    const ticket = await getTicket(ticketId);
 
     const visitData = await buildTablePayload("ticket_visits", {
       ticket_id: ticketId,
@@ -445,6 +524,12 @@ export const createAmcVisit = async (req, res) => {
       status: "active",
     });
     const visitResult = await CommonModel.saveMasterDetails({ table: "ticket_visits", data: visitData });
+    const visitId = visitResult.insertId;
+
+    notifyVisitScheduled({ ticket, visit: visitData, visitId, })
+      .catch((error) => {
+        console.log("Visit notification error :", error.message);
+      });
 
     return successResponse(res, {
       code: 1001,
@@ -453,7 +538,7 @@ export const createAmcVisit = async (req, res) => {
       data: {
         ticket_id: ticketId,
         ticket_no: ticketData.ticket_no,
-        visit_id: visitResult.insertId,
+        visit_id: visitId,
       },
     });
   } catch (error) {

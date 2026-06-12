@@ -299,33 +299,14 @@ export const getTicketDetails = async (req, res) => {
                     const feedback_token = createFeedbackToken();
                     await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { feedback_token }, where: { ticket_id }, });
                     const feedback_url = `${env.appFEUrl}/feedback/${ticket_id}/${feedback_token}`;
-
-                    emitNotification(data.created_by, {
-                        "title": "Ticket Closed",
-                        "body": `Your ticket #${data.ticket_no} has been closed by ${modifiedByName?.name || ''}`
-                    });
-
-                    await sendEmailToClient(
-                        res,
-                        ticket_id,
-                        "Ticket is Closed !",
-                        "We would like to inform you that your support ticket has been closed.",
-                        feedback_url
-                    );
+                    emitNotification(data.created_by, { "title": "Ticket Closed", "body": `Your ticket #${data.ticket_no} has been closed by ${modifiedByName?.name || ''}` });
+                    await sendEmailToClient( res, ticket_id, "Ticket is Closed !", "We would like to inform you that your support ticket has been closed.", feedback_url );
                 }
 
                 // Ticket closed
                 if (data?.due_date && old_due_date !== data.due_date) {
-                    emitNotification(data.created_by, {
-                        "title": "Ticket Due Date Updated",
-                        "body": `Your ticket #${data.ticket_no} has been change to ${data.due_date}`
-                    });
-                    await sendEmailToClient(
-                        res,
-                        ticket_id,
-                        `Due Date for your service ticket is changed! `,
-                        "We would like to inform you that due date has been changed for your support ticket.",
-                    );
+                    emitNotification(data.created_by, { "title": "Ticket Due Date Updated", "body": `Your ticket #${data.ticket_no} has been change to ${data.due_date}` });
+                    await sendEmailToClient( res, ticket_id, `Due Date for your service ticket is changed! `, "We would like to inform you that due date has been changed for your support ticket.", );
                 }
 
                 return successResponse(res, {
@@ -414,43 +395,18 @@ export const changeStatus = async (req, res) => {
 
 const sendEmailToClient = async (res, ticket_id, subject = "", message = "", redirect_url = '') => {
     try {
-        if (!ticket_id) {
-            return failureResponse(res, {
-                code: 2004,
-                httpStatus: 404,
-                message: "Ticket ID is required",
-            });
-        }
+        if (!ticket_id) { return failureResponse(res, { code: 2004, httpStatus: 404, message: "Ticket ID is required", }); }
 
         const filterData = prepareFilterData({ default_columns, custom_columns, });
         const { where, values, join, other } = filterData;
-        const select = `
-            t.ticket_no,
-            t.company_id,
-            DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date,
-            DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date,
-            a.name AS assignedTo,
-            cs.name AS clientName,
-            cs.email,
-            cs.mobile_no,
-            cs.wa_no,
-            cat.categoryName AS ticket_priority,
-            ca.categoryName AS ticket_status,
-            ct.categoryName AS query_type
-        `;
+        const select = ` t.ticket_no, t.company_id, DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date, DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date, a.name AS assignedTo, cs.name AS clientName, cs.email, cs.mobile_no, cs.wa_no, cat.categoryName AS ticket_priority, ca.categoryName AS ticket_status, ct.categoryName AS query_type `;
 
         where.push("ticket_id = ?");
         values.push(ticket_id);
 
         const ticketDetails = await CommonModel.GetMasterListDetails({ select, table: "tickets", where, values, join, other, });
 
-        if (!ticketDetails || !Array.isArray(ticketDetails) || !ticketDetails.length) {
-            return failureResponse(res, {
-                code: 2004,
-                httpStatus: 404,
-                message: "Ticket details not found",
-            });
-        }
+        if (!ticketDetails || !Array.isArray(ticketDetails) || !ticketDetails.length) { return failureResponse(res, { code: 2004, httpStatus: 404, message: "Ticket details not found", }); }
 
         const details = ticketDetails[0] || {};
         const ticket_no = details.ticket_no || "-";
@@ -464,35 +420,12 @@ const sendEmailToClient = async (res, ticket_id, subject = "", message = "", red
         const assignedTo = details.assignedTo || "-";
         const clientName = details.clientName || "User";
 
-        if (!email || email.trim() === "") {
-            return failureResponse(res, { code: 2004, httpStatus: 404, message: "Client email not found", });
-        }
+        if (!email || email.trim() === "") { return failureResponse(res, { code: 2004, httpStatus: 404, message: "Client email not found", }); }
 
-        const template = await renderTemplate("ticketNotification", "email", {
-            clientName,
-            ticketNo: ticket_no,
-            subject: subject || "Ticket Notification",
-            createdDate: created_date,
-            dueDate: due_date,
-            assignedTo,
-            message: message || "Your ticket has been updated successfully.",
-            category: query_type,
-            status: ticket_status,
-            priority: ticket_priority,
-            appName: env?.appName || "Support System",
-            redirectUrl: redirect_url
-        });
-
+        const template = await renderTemplate("ticketNotification", "email", { clientName, ticketNo: ticket_no, subject: subject || "Ticket Notification", createdDate: created_date, dueDate: due_date, assignedTo, message: message || "Your ticket has been updated successfully.", category: query_type, status: ticket_status, priority: ticket_priority, appName: env?.appName || "Support System", redirectUrl: redirect_url ,redirectUrlText:'Feedback'});
         const { success, error } = await sendEmail({ to: email, subject: subject || "Ticket Notification", html: template, text: "", company_id, });
 
-        if (!success) {
-            return failureResponse(res, {
-                code: 2008,
-                httpStatus: 500,
-                message: error || "Email sending failed",
-            });
-        }
-
+        if (!success) { return failureResponse(res, { code: 2008, httpStatus: 500, message: error || "Email sending failed", }); }
         return true;
     } catch (error) {
         console.error("sendEmailToClient Error :", error);

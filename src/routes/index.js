@@ -17,6 +17,7 @@ import dashboardRoutes from "./dashboard.routes.js";
 import bootstrapRoutes from "./bootstrap.routes.js";
 import amcReminderRoutes from "./amcReminder.routes.js";
 import reportsRoutes from "./reports.routes.js";
+import * as ticketVisitsController from "../controllers/ticketVisits.controller.js";
 
 import {verifyToken} from "../middlewares/auth.middleware.js"
 
@@ -25,6 +26,7 @@ const router = express.Router();
 router.use('/', loginRoutes);
 router.use('/',feedbackRoutes);
 router.use('/',bootstrapRoutes);
+router.post('/tickets/visits/customer-confirm', ticketVisitsController.customerConfirmVisit);
 router.use('/',verifyToken, commentsRoutes);
 router.use('/users',verifyToken, usersRoutes);
 router.use('/system',verifyToken, systemRoutes);

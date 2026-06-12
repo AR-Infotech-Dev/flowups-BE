@@ -7,8 +7,12 @@ import { sendEmail } from "../utils/email.js";
 import { renderTemplate } from "../utils/templateMaker.js";
 import { env } from "../config/env.js";
 import { getIO } from "../socket/index.js";
+import crypto from "crypto";
 
 const MODULE_TABLE = "ticket_visits";
+const createVisitToken = () => {
+    return crypto.randomBytes(32).toString("hex");
+};
 
 const getTicket = async (ticketId = null) => {
     if (!ticketId) return null;
@@ -90,13 +94,13 @@ const notifyVisitScheduled = async ({ ticket = {}, visit = {}, visitId = null } 
     const title = "Visit Scheduled";
     const body = `Visit scheduled for ticket ${details.ticket_no || ticket.ticket_no || ticket.ticket_id} on ${visitDateTime}.`;
 
-    emitNotification(details.assignee, { title, body, type: "visit", ticket_id: ticket.ticket_id, visit_id: visitId });
-    if (details.created_by && Number(details.created_by) !== Number(details.assignee)) {
-        emitNotification(details.created_by, { title, body, type: "visit", ticket_id: ticket.ticket_id, visit_id: visitId });
-    }
+    // emitNotification(details.assignee, { title, body, type: "visit", ticket_id: ticket.ticket_id, visit_id: visitId });
+    // if (details.created_by && Number(details.created_by) !== Number(details.assignee)) { emitNotification(details.created_by, { title, body, type: "visit", ticket_id: ticket.ticket_id, visit_id: visitId }); }
+    // if (!details.email) return { email_sent: false };
 
-    if (!details.email) return { email_sent: false };
-
+    const visit_token = createVisitToken();
+    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { visit_token }, where: { visit_id: visitId }, });
+    const visit_mark_url = `${env.appFEUrl}/mark_visit/${visitId}/${visit_token}`;
     const html = await renderTemplate("ticketNotification", "email", {
         clientName: details.clientName || "Customer",
         ticketNo: details.ticket_no || ticket.ticket_id,
@@ -104,12 +108,13 @@ const notifyVisitScheduled = async ({ ticket = {}, visit = {}, visitId = null } 
         createdDate: details.created_date || "-",
         dueDate: details.due_date || "-",
         assignedTo: details.assignedTo || "-",
-        message: `Your visit has been scheduled on ${visitDateTime}.${visit.visit_details ? `\n Details: ${visit.visit_details}` : ""}`,
+        message: `Your visit has been scheduled on ${visitDateTime}.${visit.visit_details ? `\n Details: ${visit.visit_details}` : ""}.${details.assignedTo ? `\n Visitor : ${details.assignedTo}` : ""}`,
         category: details.query_type || "-",
         status: details.ticket_status || "-",
         priority: details.ticket_priority || "-",
         appName: env?.appName || "Support System",
-        redirectUrl: "",
+        redirectUrl: visit_mark_url,
+        redirectUrlText: 'Mark as Visited'
     });
 
     const emailResult = await sendEmail({
@@ -220,9 +225,9 @@ export const create = async (req, res) => {
         const visitId = result.insertId;
 
         notifyVisitScheduled({ ticket, visit: data, visitId, })
-        .catch((error) => {
-            console.log("Visit notification error :", error.message);
-        });
+            .catch((error) => {
+                console.log("Visit notification error :", error.message);
+            });
 
         return successResponse(res, {
             code: 1001,
@@ -315,6 +320,72 @@ export const markVisited = async (req, res) => {
             message: "Visit marked as visited",
             data: [],
         });
+    } catch (error) {
+        return failureResponse(res, {
+            code: 2008,
+            httpStatus: 500,
+            message: error.message,
+        });
+    }
+};
+
+export const customerConfirmVisit = async (req, res) => {
+    try {
+        const { visit_id: visitId = null, token = "", customer_name = "", visit_done = "yes", comment = "", visited_latitude = null, visited_longitude = null, visited_location_accuracy = null, } = req.body;
+
+        if (!visitId || !token) { return failureResponse(res, { code: 2000, httpStatus: 400, message: "visit_id and token are required", }); }
+
+        if (!customer_name) { return failureResponse(res, { code: 2000, httpStatus: 400, message: "customer_name is required", }); }
+
+        if (visited_latitude === null || visited_longitude === null || visited_latitude === "" || visited_longitude === "") { return failureResponse(res, { code: 2000, httpStatus: 400, message: "Location is required to confirm visit", }); }
+
+        const rows = await CommonModel.getMasterDetails(MODULE_TABLE, "*", { visit_id: visitId, visit_token: token, status: "active", });
+        const visit = rows?.[0] || null;
+
+        if (!visit) { return failureResponse(res, { code: 2004, httpStatus: 404, message: "Invalid or expired visit link", }); }
+
+        if (String(visit.visit_status || "").toLowerCase() === "visited") { return failureResponse(res, { code: 2000, httpStatus: 409, message: "Visit is already marked as visited", }); }
+        
+        const scheduledAt = toDateValue(visit.visit_scheduled_at);
+        const now = new Date();
+        if (scheduledAt && now < scheduledAt) {
+            return failureResponse(res, {
+                code: 2000,
+                httpStatus: 400,
+                message: `Visit can be marked visited only after scheduled time (${formatVisitDateTime(visit.visit_scheduled_at)}).`,
+            });
+        }
+        
+        const isVisited = String(visit_done || "yes").toLowerCase() === "yes";
+        const confirmationNote = [
+            visit.visit_details || "",
+            `Customer confirmation: ${isVisited ? "Visit completed" : "Visit not completed"}`,
+            comment ? `Comment: ${comment}` : "",
+        ].filter(Boolean).join("\n");
+
+        const data = await buildTablePayload(MODULE_TABLE, {
+            visited_at: isVisited ? toMysqlDateTime() : visit.visited_at,
+            visit_details: confirmationNote,
+            visit_status: isVisited ? "visited" : "scheduled",
+            latitude: String(visited_latitude),
+            longitude: String(visited_longitude),
+            marked_by: customer_name,
+            modified_date: toMysqlDateTime(),
+        });
+
+        await CommonModel.updateMasterDetails({
+            table: MODULE_TABLE,
+            data,
+            where: { visit_id: visitId, visit_token: token },
+        });
+
+        return successResponse(res, {
+            code: 1002,
+            httpStatus: 200,
+            message: isVisited ? "Visit confirmed successfully" : "Visit response submitted successfully",
+            data: [],
+        });
+
     } catch (error) {
         return failureResponse(res, {
             code: 2008,
