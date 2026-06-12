@@ -16,8 +16,8 @@ export const verifyUserDetails = async (userName) => {
       OR t.userName = ?
       OR t.contactNo = ?
     )
-    AND t.status = 'active'
-  `;
+    `;
+    // AND t.status = 'active'
   return await query(sql, [userName, userName, userName]);
 };
 
