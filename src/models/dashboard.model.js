@@ -1,12 +1,11 @@
+import { json, response } from "express";
 import { query, DB_PREFIX } from "../config/database.js";
 
 const ADMIN_ROLE_SLUGS = new Set(["admin"]);
 const CLOSED_STATUS_ID = 208;
 const isSuperAdmin = (roleSlug) => { return String(roleSlug).toLowerCase() === "super_admin"; };
 const isAdminRole = (roleSlug = "") => ADMIN_ROLE_SLUGS.has(String(roleSlug).toLowerCase());
-
 const getCompanyId = (user = {}) => user?.company_id || user?.default_company || null;
-
 const addCompanyScope = (where, params, user = {}, alias = "t") => {
   const companyId = getCompanyId(user);
   if (companyId) {
@@ -14,7 +13,6 @@ const addCompanyScope = (where, params, user = {}, alias = "t") => {
     params.push(companyId);
   }
 };
-
 const getTicketScope = (user = {}) => {
   const where = [];
   const params = [];
@@ -28,9 +26,7 @@ const getTicketScope = (user = {}) => {
 
   return { where, params };
 };
-
 const getScopedWhereSql = (where = []) => (where.length ? ` WHERE ${where.join(" AND ")}` : "");
-
 const getSingleCount = async ({ table, alias = "t", user, extraWhere = [], extraParams = [], userScope = true } = {}) => {
   const where = [];
   const params = [];
@@ -49,7 +45,6 @@ const getSingleCount = async ({ table, alias = "t", user, extraWhere = [], extra
 
   return Number(rows[0]?.total || 0);
 };
-
 export const getSummary = async (user = {}) => {
   const { where: ticketWhere, params: ticketParams } = getTicketScope(user);
   const closedCondition = "(LOWER(COALESCE(c.categoryName, '')) LIKE '%closed%' OR t.ticket_status = ?)";
@@ -65,6 +60,7 @@ export const getSummary = async (user = {}) => {
     todayFollowupsRows,
     overdueRows,
     highPriorityRows,
+    amcSummary,
   ] = await Promise.all([
     getSingleCount({ table: "customer", user }),
     getSingleCount({ table: "admin", user, extraWhere: ["t.status = ?"], extraParams: ["active"] }),
@@ -110,6 +106,7 @@ export const getSummary = async (user = {}) => {
        ${getScopedWhereSql([...ticketWhere, "(LOWER(COALESCE(p.categoryName, '')) LIKE '%high%' OR LOWER(COALESCE(p.categoryName, '')) LIKE '%urgent%')"])}`,
       ticketParams
     ),
+    getAmcSummary(user)
   ]);
 
   const closedTickets = Number(closedTicketsRows[0]?.total || 0);
@@ -126,6 +123,9 @@ export const getSummary = async (user = {}) => {
       { key: "followups", label: "Today Follow-ups", value: todayFollowups, delta: `${overdueTickets} overdue`, tone: "green", redirectTo: '/tickets' },
       { key: "users", label: "Active Users", value: activeUsers, delta: "Team members", tone: "violet", redirectTo: '/users' },
       { key: "sla", label: "SLA Health", value: `${slaHealth}%`, delta: `${closedTickets} closed`, tone: overdueTickets ? "red" : "green", redirectTo: '/tickets' },
+      { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
+      { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
+      { key: "amcExpired", label: "AMC Expired", value: amcSummary.expired, delta: "Needs renewal", tone: "red", redirectTo: "/customers?amc=expired" },
     ];
   }
   if (isSuperAdmin(user?.role_slug)) {
@@ -135,6 +135,9 @@ export const getSummary = async (user = {}) => {
       { key: "followups", label: "Today Follow-ups", value: todayFollowups, delta: `${overdueTickets} overdue`, tone: "green", redirectTo: '/tickets' },
       { key: "users", label: "Active Users", value: activeUsers, delta: "Team members", tone: "violet", redirectTo: '/users' },
       { key: "sla", label: "SLA Health", value: `${slaHealth}%`, delta: `${closedTickets} closed`, tone: overdueTickets ? "red" : "green", redirectTo: '/tickets' },
+      { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
+      { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
+      { key: "amcExpired", label: "AMC Expired", value: amcSummary.expired, delta: "Needs renewal", tone: "red", redirectTo: "/customers?amc=expired" },
       { key: "companies", label: "Companies", value: companies, delta: "Active companies", tone: "cyan", redirectTo: '/companies' },
     ];
   }
@@ -144,9 +147,101 @@ export const getSummary = async (user = {}) => {
     { key: "myFollowups", label: "My Follow-ups", value: todayFollowups, delta: "Today", tone: "blue", redirectTo: '/tickets' },
     { key: "closed", label: "Closed Tickets", value: closedTickets, delta: "In my scope", tone: "green", redirectTo: '/tickets' },
     { key: "overdue", label: "Overdue", value: overdueTickets, delta: "Needs action", tone: "red", redirectTo: '/tickets' },
+    { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
+    { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
+    { key: "amcExpired", label: "AMC Expired", value: amcSummary.expired, delta: "Needs renewal", tone: "red", redirectTo: "/customers?amc=expired" },
   ];
 };
+export const getAmcSummary = async (user = {}) => {
+  const where = [];
+  const params = [];
 
+  addCompanyScope(where, params, user, "c");
+
+  const [activeRows, expiringRows, expiredRows] = await Promise.all([
+    query(
+      `SELECT COUNT(*) total
+       FROM ${DB_PREFIX}customer c
+       ${getScopedWhereSql([
+        ...where,
+        "c.is_amc='yes'",
+        "c.status='active'",
+        "c.amc_end_date >= CURDATE()",
+      ])}`,
+      params
+    ),
+
+    query(
+      `SELECT COUNT(*) total
+       FROM ${DB_PREFIX}customer c
+       ${getScopedWhereSql([
+        ...where,
+        "c.is_amc='yes'",
+        "c.amc_end_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)",
+      ])}`,
+      params
+    ),
+
+    query(
+      `SELECT COUNT(*) total
+       FROM ${DB_PREFIX}customer c
+       ${getScopedWhereSql([
+        ...where,
+        "c.is_amc='yes'",
+        "c.amc_end_date < CURDATE()",
+      ])}`,
+      params
+    ),
+  ]);
+
+  return {
+    active: Number(activeRows[0]?.total || 0),
+    expiring: Number(expiringRows[0]?.total || 0),
+    expired: Number(expiredRows[0]?.total || 0),
+  };
+};
+export const getAmcHealth = async (user = {}) => {
+  const data = await getAmcSummary(user);
+  return [
+    { label: "Active", value: data.active, color: "#16a34a" },
+    { label: "Expiring", value: data.expiring, color: "#d97706" },
+    { label: "Expired", value: data.expired, color: "#dc2626" }];
+};
+export const getAmcAlerts = async (user = {}) => {
+  const where = [];
+  const params = [];
+
+  addCompanyScope(where, params, user, "c");
+
+  const rows = await query(
+    `SELECT
+        c.customer_id,
+        c.name,
+        c.amc_end_date,
+        DATEDIFF(c.amc_end_date, CURDATE()) AS days_left,
+        a.name as responsible_person
+     FROM ${DB_PREFIX}customer c 
+     LEFT JOIN ${DB_PREFIX}admin a ON c.responsible_person = a.adminID
+     ${getScopedWhereSql([
+      ...where,
+      "c.is_amc='yes'",
+      "c.amc_end_date IS NOT NULL",
+      "c.amc_end_date <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)"
+    ])}
+     ORDER BY c.amc_end_date ASC
+     LIMIT 10`,
+    params
+  );
+
+  return rows.map(row => ({
+    id: row.customer_id,
+    customer: row.name,
+    responsible_person: (isSuperAdmin(user?.role_slug) || isAdminRole(user?.role_slug)) ? row.responsible_person : null,
+    amcEndDate: row.amc_end_date,
+    daysLeft: Number(row.days_left),
+    tone: row.days_left < 0 ? "red" : row.days_left <= 7 ? "amber" : "blue",
+  }));
+};
 export const getTicketStatus = async (user = {}) => {
   const { where, params } = getTicketScope(user);
   const rows = await query(
@@ -168,7 +263,6 @@ export const getTicketStatus = async (user = {}) => {
     color: row.color || "#64748b",
   }));
 };
-
 export const getTicketTrend = async (user = {}) => {
   const { where, params } = getTicketScope(user);
   const rows = await query(
@@ -188,7 +282,6 @@ export const getTicketTrend = async (user = {}) => {
     value: Number(row.value || 0),
   }));
 };
-
 export const getWorkload = async (user = {}) => {
   const { where, params } = getTicketScope(user);
   const closedCondition = "(LOWER(COALESCE(s.categoryName, '')) LIKE '%closed%' OR t.ticket_status = ?)";
@@ -214,7 +307,6 @@ export const getWorkload = async (user = {}) => {
     { label: "Resolved", value: Number(data.resolved || 0), color: "#16a34a" },
   ];
 };
-
 export const getRecentActivity = async (user = {}) => {
   const { where, params } = getTicketScope(user);
   const rows = await query(
@@ -241,14 +333,74 @@ export const getRecentActivity = async (user = {}) => {
     tone: String(row.status_name || "").toLowerCase().includes("closed") ? "green" : "blue",
   }));
 };
+export const getProductExpiryAlerts = async (user = {}) => {
+  const where = [];
+  const params = [];
 
+  addCompanyScope(where, params, user, "c");
+
+  const customers = await query(
+    `SELECT c.customer_id, c.name, c.customer_products
+     FROM ${DB_PREFIX}customer c
+     ${getScopedWhereSql(where)}
+     AND c.customer_products IS NOT NULL`,
+    params
+  );
+
+  const products = [];
+  customers.forEach((customer) => {
+    let customerProducts = [];
+
+    try {
+      customerProducts = Array.isArray(customer.customer_products) ? customer.customer_products || [] : JSON.parse(customer.customer_products) || "[]";
+    } catch {
+      customerProducts = [];
+    }
+
+    customerProducts.forEach((product) => {
+      if (!product.expiry_date) return;
+
+      const expiryDate = new Date(product.expiry_date);
+      const today = new Date();
+
+      const daysLeft = Math.ceil(
+        (expiryDate - today) / (1000 * 60 * 60 * 24)
+      );
+
+      if (daysLeft <= 30) {
+        products.push({
+          customer_id: customer.customer_id,
+          customer_name: customer.name,
+          product_name: product.product_name,
+          serial_number: product.serial_number,
+          expiry_date: product.expiry_date,
+          days_left: daysLeft,
+          tone:
+            daysLeft < 0
+              ? "red"
+              : daysLeft <= 7
+                ? "amber"
+                : "blue",
+        });
+      }
+    });
+  });
+
+  return products
+    .sort((a, b) => a.days_left - b.days_left)
+    .slice(0, 10);
+};
 export const getDashboardOverview = async (user = {}) => {
-  const [summary, ticketStatus, ticketTrend, workload, recentActivity] = await Promise.all([
+  const [summary, amcSummary, amcHealth, ticketStatus, ticketTrend, workload, recentActivity, amcAlerts, productExpiryAlerts] = await Promise.all([
     getSummary(user),
+    getAmcSummary(user),
+    getAmcHealth(user),
     getTicketStatus(user),
     getTicketTrend(user),
     getWorkload(user),
     getRecentActivity(user),
+    getAmcAlerts(user),
+    getProductExpiryAlerts(user),
   ]);
 
   return {
@@ -259,7 +411,10 @@ export const getDashboardOverview = async (user = {}) => {
       ticketStatus,
       ticketTrend,
       workload,
+      amcHealth,
     },
     recentActivity,
+    amcAlerts,
+    productExpiryAlerts,
   };
 };

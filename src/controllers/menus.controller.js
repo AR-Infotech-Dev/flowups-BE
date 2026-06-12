@@ -82,8 +82,6 @@ export const list = async (req, res) => {
     const end = Math.min(start + limit, total);
 
     let menuList = [];
-    console.log('other : ',other);
-    
     if (getAll === "Y") {
       menuList = await CommonModel.GetMasterListDetails({
         select,
@@ -170,7 +168,6 @@ export const menulist = async (req, res) => {
     const end = Math.min(start + limit, total);
 
     let menuList = [];
-    console.log('other : ',other);
     
     if (getAll === "Y") {
       menuList = await CommonModel.GetMasterListDetails({

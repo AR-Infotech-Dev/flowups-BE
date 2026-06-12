@@ -301,7 +301,6 @@ export const getAdminDetails = async (req, res) => {
           text: "",
           company_id: data.company_id || req.user.company_id,
         });
-        // console.log('success : ' ,success);
         if (!success) {
           return failureResponse(res, {
             code: 2008,

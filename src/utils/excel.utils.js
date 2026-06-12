@@ -49,11 +49,6 @@ export function buildSideBySideRows({
 
 export const excelFormat = (html) => renderTemplate("excelLayout", "excel", { bodyRows: html });
 export const buildExcelAttachment = ({ filename, html, contentType = EXCEL_CONTENT_TYPE } = {}) => {
-  console.log('sdasdad : ',{
-    filename,
-    // content: html,
-    contentType,
-  });
 
   return ({
     filename,

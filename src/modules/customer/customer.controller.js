@@ -32,7 +32,7 @@ import * as XLSX from "xlsx";
 // ======================================================
 export const list = async (req, res) => {
   try {
-    const { page = 1, searchText = "", getAll = "N", orderBy = "created_date", order = "DESC", filters = [], } = req.body;
+    const { page = 1, searchText = "", getAll = "N", order_by = "created_date", order = "DESC", filters = [], } = req.body;
     const limit = 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
@@ -41,7 +41,7 @@ export const list = async (req, res) => {
       filters,
       searchText,
       other: {
-        orderBy,
+        orderBy : order_by,
         order,
         searchColumns: CUSTOMER_SEARCH_COLUMNS,
       },

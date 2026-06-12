@@ -13,6 +13,8 @@ export const overview = async (req, res) => {
       },
     });
   } catch (error) {
+    console.log(error);
+    
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,

@@ -66,8 +66,6 @@ export const getModulesAccess = async (req, res) => {
 export const saveModulesAccess = async (req, res) => {
   try {
     const { id: user_id = null } = req.params;
-    console.log(req.body);
-
     if (!user_id) {
       return failureResponse(res, {
         code: 2004,
@@ -95,8 +93,6 @@ export const saveModulesAccess = async (req, res) => {
       user_id: data.user_id,
       // company_id: data.company_id,
     });
-    console.log('existingRows : ',existingRows);
-    
 
     if (!existingRows.length) {
       const createData = {

@@ -29,16 +29,7 @@ const isAdmin = (user = {}) => {
     return String(user.role_slug || "").toLowerCase() === "admin";
 };
 
-const getAssigneeHistoryExistsSql = (userId, condition) => `
-    EXISTS (
-        SELECT 1
-        FROM ${DB_PREFIX}ticket_history h
-        WHERE h.ticket_id = t.ticket_id
-          AND h.field_name = 'assignee'
-          AND h.action_type = 'reassigned'
-          AND (${condition})
-    )
-`;
+const getAssigneeHistoryExistsSql = (userId, condition) => `EXISTS (SELECT 1 FROM ${DB_PREFIX}ticket_history h WHERE h.ticket_id = t.ticket_id AND h.field_name = 'assignee' AND h.action_type = 'reassigned' AND (${condition}))`;
 
 const getTicketVisibilitySelect = (userId = null) => {
     const safeUserId = Number(userId || 0);
@@ -177,20 +168,18 @@ export const list = async (req, res) => {
             where.push("t.company_id = ?");
             values.push(req.user.company_id);
         }
+        // TICKETS with amc_call : n 
+        where.push("t.amc_call = ?");
+        values.push('n');
+        
+        // TICKETS with incomming CAlls only 
+        where.push("t.call_direction = ?");
+        values.push('in');
 
-        const shouldFilterByAssignee =
-            !isSuperAdmin(req.user) &&
-            !(isAdmin(req.user) && (viewAll === "Y" || getAll === "Y")) &&
-            userId;
+        const shouldFilterByAssignee = !isSuperAdmin(req.user) && !(isAdmin(req.user) && (viewAll === "Y" || getAll === "Y")) && userId;
 
         if (shouldFilterByAssignee && userId) {
-            where.push(`
-                (
-                    t.assignee = ?
-                    OR t.created_by = ?
-                    OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")}
-                )
-            `);
+            where.push(`(t.assignee = ? OR t.created_by = ? OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")})`);
             values.push(userId, userId, userId, userId, userId);
         }
 
@@ -199,15 +188,6 @@ export const list = async (req, res) => {
 
         let end = start + limit;
         if (end > total) end = total;
-
-        // join.push({
-        //     type: "LEFT JOIN",
-        //     table: 'ticket_work_logs',
-        //     alias: 'twl',
-        //     key1: 'ticket_id',
-        //     key2: 'ticket_id',
-        //     column: 'work_status'
-        // })
 
         let adminDetails = [];
         if (getAll === "Y") {
@@ -249,7 +229,6 @@ export const getTicketDetails = async (req, res) => {
         const { id: ticket_id = null } = req.params;
         const body = await buildTablePayload(MODULE_TABLE, req.body);
         let data = {};
-
         switch (method) {
             case "PUT": {
                 const next_id = await CommonModel.getNextID(MODULE_TABLE, 'ticket_id');
@@ -263,7 +242,7 @@ export const getTicketDetails = async (req, res) => {
                     company_id: req.user.company_id,
                 });
                 const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data: data });
-
+                
                 if (data.assignee && Number(data.assignee) !== Number(data.created_by)) {
                     emitNotification(data.assignee, {
                         "title": "New Ticket Assigned created",
@@ -272,22 +251,12 @@ export const getTicketDetails = async (req, res) => {
                 }
 
                 await sendEmailToClient(res, result.insertId, 'Your Call is Registered', 'Your support ticket has been successfully created. Our team will review it shortly.')
-                return successResponse(res, {
-                    code: 1001,
-                    httpStatus: 201,
-                    data: {
-                        insertId: result.insertId,
-                    },
-                });
+                return successResponse(res, { code: 1001, httpStatus: 201, data: { insertId: result.insertId, }, });
             }
 
             case "POST": {
-                if (!ticket_id) {
-                    return failureResponse(res, {
-                        code: 2004,
-                        httpStatus: 404,
-                    });
-                }
+                if (!ticket_id) { return failureResponse(res, { code: 2004, httpStatus: 404, }); }
+
                 const active_amc = req.body.client_id ? await resolveTicketActiveAmc(req.body.client_id) : undefined;
                 data = await buildTablePayload(MODULE_TABLE, {
                     ...prepareTicketBody(req.body),
@@ -300,16 +269,11 @@ export const getTicketDetails = async (req, res) => {
                 const old_assignee = old_details?.length > 0 ? old_details[0]?.old_assignee : null;
                 const old_ticket_status = old_details?.length > 0 ? old_details[0]?.old_ticket_status : null;
                 const old_due_date = old_details?.length > 0 ? old_details[0]?.old_due_date : null;
-                console.log('data : ', data);
 
                 if (data?.assignee && Number(old_assignee) !== Number(data.assignee)) {
                     const activeWorkLog = await hasActiveWorkLog(ticket_id);
                     if (activeWorkLog) {
-                        return failureResponse(res, {
-                            code: 2000,
-                            httpStatus: 409,
-                            message: "Ticket work is already started. End the active work before reassigning.",
-                        });
+                        return failureResponse(res, { code: 2000, httpStatus: 409, message: "Ticket work is already started. End the active work before reassigning.", });
                     }
                 }
 
