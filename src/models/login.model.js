@@ -30,9 +30,9 @@ export const findUserByEmail = async (email) => {
     SELECT *
     FROM ${DB_PREFIX}admin
     WHERE email = ?
-      AND status = 'active'
     LIMIT 1
-  `;
+    `;
+    // AND status = 'active'
   const rows = await query(sql, [email]);
   return rows[0] || null;
 };
