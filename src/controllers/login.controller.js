@@ -61,13 +61,13 @@ export const login = async (req, res) => {
     // ===============================
     // STATUS CHECK
     // ===============================
-    if (user.status !== "active") {
-      return failureResponse(res, {
-        code: 2003,
-        httpStatus: 403,
-        message: "Account is inactive",
-      });
-    }
+    // if (user.status !== "active") {
+    //   return failureResponse(res, {
+    //     code: 2003,
+    //     httpStatus: 403,
+    //     message: "Account is inactive",
+    //   });
+    // }
 
     // ===============================
     // PASSWORD CHECK
