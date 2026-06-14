@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
-import { env } from "../config/env.js";
-import { failureResponse } from "../utils/apiResponse.js";
-import { getActiveSessionId } from "../utils/activeSession.js";
+import { env } from "#config/env.js";
+import { failureResponse } from "#shared/utils/apiResponse.js";
+import { getActiveSessionId } from "#shared/utils/activeSession.js";
 
 // export const verifyToken = (req, res, next) => {
 //     try {

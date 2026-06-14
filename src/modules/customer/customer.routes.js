@@ -1,7 +1,7 @@
 import express from "express";
 import multer from "multer";
 import * as customerController from "./customer.controller.js";
-import { requirePermission } from "../../middlewares/permissions.middleware.js";
+import { requirePermission } from "#middlewares/permissions.middleware.js";
 
 const customerRoutes = express.Router();
 const upload = multer({

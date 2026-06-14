@@ -1,5 +1,5 @@
-import * as CommonModel from "../../models/common.model.js";
-import { DB_PREFIX, query } from "../../config/database.js";
+import * as CommonModel from "#shared/models/common.model.js";
+import { DB_PREFIX, query } from "#config/database.js";
 import { MODULE_TABLE } from "./customer.constants.js";
 
 export const getCustomerById = (customerId) => CommonModel.getMasterDetails(MODULE_TABLE, "*", { customer_id: customerId });

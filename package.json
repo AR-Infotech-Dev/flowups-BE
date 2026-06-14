@@ -3,6 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "imports": {
+    "#config/*": "./src/config/*",
+    "#middlewares/*": "./src/middlewares/*",
+    "#modules/*": "./src/modules/*",
+    "#routes/*": "./src/routes/*",
+    "#shared/*": "./src/shared/*",
+    "#socket/*": "./src/socket/*",
+    "#templates/*": "./src/templates/*"
+  },
   "description": "Express migration scaffold for the legacy CodeIgniter API",
   "main": "src/server.js",
   "scripts": {

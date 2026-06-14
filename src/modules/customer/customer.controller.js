@@ -1,8 +1,8 @@
-import * as CommonModel from "../../models/common.model.js";
-import { successResponse, failureResponse } from "../../utils/apiResponse.js";
-import { prepareFilterData } from "../../utils/filter.builder.js";
-import { toMysqlDateTime } from "../../utils/dateTime.js";
-import { validateBody } from "../../utils/bodyValidator.js";
+import * as CommonModel from "#shared/models/common.model.js";
+import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
+import { prepareFilterData } from "#shared/utils/filter.builder.js";
+import { toMysqlDateTime } from "#shared/utils/dateTime.js";
+import { validateBody } from "#shared/utils/bodyValidator.js";
 import { CUSTOMER_IMPORT_COLUMNS, CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
 import { customColumns, defaultColumns } from "./customer.filter.js";
 import { customerValidationRules } from "./customer.validation.js";

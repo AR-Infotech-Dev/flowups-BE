@@ -1,9 +1,10 @@
 import * as XLSX from "xlsx";
-import { toMysqlDateTime } from "../../utils/dateTime.js";
+import { toMysqlDateTime } from "#shared/utils/dateTime.js";
+import { isSuperAdminRole } from "#shared/utils/role.utils.js";
 import { CUSTOMER_IMPORT_COLUMNS } from "./customer.constants.js";
 
 export const isSuperAdmin = (user = {}) =>
-  String(user.role_slug || "").toLowerCase() === "super_admin";
+  isSuperAdminRole(user);
 
 export const normalizeProductIds = (value) => {
   if (Array.isArray(value)) {
