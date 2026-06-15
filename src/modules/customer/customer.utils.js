@@ -145,16 +145,19 @@ const normalizeImportDate = (value) => {
   return text;
 };
 
-const buildCustomerProductsFromImport = (productIdsValue, serialNumbersValue) => {
+const buildCustomerProductsFromImport = (productIdsValue, serialNumbersValue, productNamesValue, expiryDatesValue) => {
   const productIds = normalizeProductIds(productIdsValue);
   const serialNumbers = normalizeProductIds(serialNumbersValue);
+  const productNames = normalizeProductIds(productNamesValue);
+  const expiryDates = normalizeProductIds(expiryDatesValue).map(normalizeImportDate);
+  const maxRows = Math.max(productIds.length, productNames.length, serialNumbers.length, expiryDates.length);
 
-  return productIds.map((product_id, index) => ({
-    product_id,
-    product_name: "",
-    expiry_date: "",
+  return Array.from({ length: maxRows }, (_, index) => ({
+    product_id: productIds[index] || "",
+    product_name: productNames[index] || "",
+    expiry_date: expiryDates[index] || "",
     serial_number: serialNumbers[index] || "",
-  }));
+  })).filter((item) => item.product_id || item.product_name || item.serial_number || item.expiry_date);
 };
 
 export const rowLooksEmpty = (row = []) => row.every((cell) => getCellValue(cell) === "");
@@ -186,7 +189,12 @@ export const buildImportDataFromRow = (headers = [], row = []) => {
 };
 
 export const buildCustomerPayloadFromImport = (rowData = {}, user = {}) => {
-  const customerProducts = buildCustomerProductsFromImport(rowData.product_ids, rowData.serial_numbers);
+  const customerProducts = buildCustomerProductsFromImport(
+    rowData.product_ids,
+    rowData.serial_numbers,
+    rowData.product_names,
+    rowData.product_expiry_dates,
+  );
   const payload = {
     name: rowData.name,
     contact_person: rowData.contact_person || null,

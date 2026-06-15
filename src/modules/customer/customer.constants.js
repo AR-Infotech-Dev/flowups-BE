@@ -26,5 +26,7 @@ export const CUSTOMER_IMPORT_COLUMNS = [
   { label: "AMC Start Date", key: "amc_start_date", sample: "2026-04-02" },
   { label: "AMC End Date", key: "amc_end_date", sample: "2027-04-01" },
   { label: "Product IDs", key: "product_ids", sample: "1,2" },
+  { label: "Product Names", key: "product_names", sample: "CRM Basic,CRM Premium" },
   { label: "Serial Numbers", key: "serial_numbers", sample: "SR-001,SR-002" },
+  { label: "Product Expiry Dates", key: "product_expiry_dates", sample: "2027-04-01,2028-04-01" },
 ];

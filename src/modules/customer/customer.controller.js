@@ -8,7 +8,9 @@ import { customColumns, defaultColumns } from "./customer.filter.js";
 import { customerValidationRules } from "./customer.validation.js";
 import {
   createCustomer,
+  createCustomersBulk,
   deleteCustomers,
+  findExistingCustomerDuplicateKeys,
   getCustomerById,
   getCustomerTableColumns,
   updateCustomer,
@@ -26,6 +28,17 @@ import {
   rowLooksLikeTemplateKeyRow,
 } from "./customer.utils.js";
 import * as XLSX from "xlsx";
+
+const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } = {}) => {
+  const normalizedName = String(name || "").trim().toLowerCase();
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+
+  if (!normalizedName || !normalizedEmail) {
+    return "";
+  }
+
+  return `${company_id ?? "no-company"}::${normalizedName}::${normalizedEmail}`;
+};
 
 // ======================================================
 // LIST CUSTOMERS
@@ -332,6 +345,8 @@ export const importCustomers = async (req, res) => {
     const headers = rows[headerIndex];
     const tableColumns = await getCustomerTableColumns();
     const errors = [];
+    const validRows = [];
+    const importDuplicateKeys = new Set();
     let inserted = 0;
     let skipped = 0;
 
@@ -365,11 +380,39 @@ export const importCustomers = async (req, res) => {
         continue;
       }
 
+      validRows.push({
+        rowNumber,
+        payload,
+      });
+    }
+
+    const existingDuplicateKeys = await findExistingCustomerDuplicateKeys(validRows.map((row) => row.payload));
+    const rowsToInsert = [];
+
+    validRows.forEach(({ rowNumber, payload }) => {
+      const duplicateKey = buildCustomerDuplicateKey(payload);
+      if (duplicateKey) {
+        if (importDuplicateKeys.has(duplicateKey)) {
+          skipped += 1;
+          errors.push({ row: rowNumber, message: "Duplicate customer skipped from import file. Same Customer Name and Email already exists in this file." });
+          return;
+        }
+
+        if (existingDuplicateKeys.has(duplicateKey)) {
+          skipped += 1;
+          errors.push({ row: rowNumber, message: "Duplicate customer skipped. Same Customer Name and Email already exists." });
+          return;
+        }
+
+        importDuplicateKeys.add(duplicateKey);
+      }
+
       const insertPayload = filterPayloadByColumns(payload, tableColumns);
+      rowsToInsert.push(insertPayload);
+    });
 
-      await createCustomer(insertPayload);
-
-      inserted += 1;
+    if (rowsToInsert.length) {
+      inserted = await createCustomersBulk(rowsToInsert);
     }
 
     return successResponse(res, {
