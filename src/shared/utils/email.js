@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import path from "path";
 import { env } from "#config/env.js";
 import { query, DB_PREFIX } from "#config/database.js";
 import { renderTemplate } from "./templateMaker.js";
@@ -84,13 +85,14 @@ export const testSmtpConnection = async (config = {}) => {
 
         await transporter.verify();
         const html = await renderTemplate("smtpConnectionTest", "email");
+        const formattedHtml = await mailFormat(config, html);
 
         await transporter.sendMail({
             from: `${senderName} <${senderEmail}>`,
             to: senderEmail,
             subject: "SMTP Connection Test",
             text: "SMTP configuration successful.",
-            html,
+            html: formattedHtml,
         });
 
         return {
@@ -222,8 +224,14 @@ const buildLogoUrl = (logoPath = "") => {
     }
 
     const baseUrl = String(env.appUrl || env.appLink || "").replace(/\/+$/, "");
-    const cleanPath = rawLogoPath.replace(/^\/+/, "");
-    return baseUrl ? `${baseUrl}/${cleanPath}` : `/${cleanPath}`;
+    const cleanPath = rawLogoPath
+        .replace(/\\/g, "/")
+        .replace(/^.*?public\//, "")
+        .replace(/^\/+/, "");
+    const normalizedPath = cleanPath.includes("images/company-logos/")
+        ? cleanPath.slice(cleanPath.indexOf("images/company-logos/"))
+        : `images/company-logos/${path.basename(cleanPath)}`;
+    return baseUrl ? `${baseUrl}/${normalizedPath}` : `/${normalizedPath}`;
 };
 
 const mailFormat = async (companyConfig = {}, html = '') => {

@@ -11,7 +11,7 @@ usersRoutes.post('/status', userController.updateStatus);
 usersRoutes.get('/profile', userController.getProfile);
 usersRoutes.post('/profile', userController.updateProfile);
 usersRoutes.post('/profile/change-password', userController.changeProfilePassword);
-usersRoutes.post('/get-markers', requirePermission(['admin', 'users'], 'view'), userController.getMarkers);
+usersRoutes.post('/get-markers', userController.getMarkers);
 usersRoutes.put('/create', requirePermission(['admin', 'users'], 'create'), userController.getAdminDetails);
 usersRoutes.get('/:id', requirePermission(['admin', 'users'], 'view'), userController.getAdminDetails);
 usersRoutes.post('/:id', requirePermission(['admin', 'users'], 'edit'), userController.getAdminDetails);

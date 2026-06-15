@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 const MODULE_TABLE = "company_master";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../public/images/company-logos");
+const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../../public/images/company-logos");
 
 const default_columns = {};
 
@@ -356,7 +356,7 @@ export const removeCompanyLogo = async (req, res) => {
 
     // Delete physical file if exists
     if (logoPath) {
-      const absolutePath = path.join(process.cwd(), logoPath);
+      const absolutePath = path.resolve(process.cwd(), logoPath.replace(/^\/+/, ""));
 
       if (fs.existsSync(absolutePath)) {
         fs.unlinkSync(absolutePath);
