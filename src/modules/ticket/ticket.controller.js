@@ -36,13 +36,16 @@ import { ticketValidationRules } from "./ticket.validation.js";
 
 export const list = async (req, res) => {
   try {
-    const { viewAll, client_id = null, page = 1, searchText = "", getAll = "N", filters = [] } = req.body;
+    const { viewAll, client_id = null, page = 1, searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
     const limit = 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
     const userId = Number(req.user.adminID || 0);
+    const effectiveFilters = ticket_status
+      ? filters.filter((filter) => filter?.field !== "ticket_status")
+      : filters;
     const filterData = prepareFilterData({
-      filters,
+      filters: effectiveFilters,
       searchText,
       other: { orderBy: "ticket_id", order: "DESC", searchColumns: TICKET_SEARCH_COLUMNS },
       default_columns: defaultColumns,
@@ -54,6 +57,10 @@ export const list = async (req, res) => {
     if (client_id) {
       where.push("t.client_id = ?");
       values.push(client_id);
+    }
+    if (ticket_status) {
+      where.push("t.ticket_status = ?");
+      values.push(ticket_status);
     }
 
     if (!isSuperAdmin(req.user) && req.user.company_id) {
@@ -75,6 +82,7 @@ export const list = async (req, res) => {
     const total = await countTickets({ where, values, join, other });
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
+
     const rows = getAll === "Y"
       ? await listTickets({ select: `${select}${visibilitySelect}`, where, values, join, other })
       : await listTickets({ select: `${select}${visibilitySelect}`, where, values, join, other, limit, start });

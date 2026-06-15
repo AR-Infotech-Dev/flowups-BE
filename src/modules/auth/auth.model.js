@@ -46,10 +46,10 @@ export const findUserByOtp = async (otp) => {
     FROM ${DB_PREFIX}admin
     WHERE otp = ?
       AND isEmailSend = 'yes'
-      AND status = 'active'
       LIMIT 1
+      AND otp_exp_time >= NOW()
       `;
-      // AND otp_exp_time >= NOW()
+      // AND status = 'active'
   
   const rows = await query(sql, [otp]);
   return rows[0] || null;

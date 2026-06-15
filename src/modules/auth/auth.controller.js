@@ -129,6 +129,7 @@ export const login = async (req, res) => {
             roleID: user.roleID,
             company_id: companyId,
             company_name: company_name,
+            company_logo: company_logo,
             role_slug: user.role_slug,
           },
         },
