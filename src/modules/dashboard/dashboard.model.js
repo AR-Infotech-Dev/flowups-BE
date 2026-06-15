@@ -336,12 +336,8 @@ export const getProductExpiryAlerts = async (user = {}) => {
   const params = [];
 
   addCompanyScope(where, params, user, "c");
-
   const customers = await query(
-    `SELECT c.customer_id, c.name, c.customer_products
-     FROM ${DB_PREFIX}customer c
-     ${getScopedWhereSql(where)}
-     AND c.customer_products IS NOT NULL`,
+    `SELECT c.customer_id, c.name, c.customer_products FROM ${DB_PREFIX}customer c ${getScopedWhereSql(where) !== "" ? `${getScopedWhereSql(where)} AND` : " WHERE "} c.customer_products IS NOT NULL`,
     params
   );
 
