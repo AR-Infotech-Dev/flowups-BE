@@ -59,17 +59,6 @@ export const login = async (req, res) => {
     }
 
     // ===============================
-    // STATUS CHECK
-    // ===============================
-    // if (user.status !== "active") {
-    //   return failureResponse(res, {
-    //     code: 2003,
-    //     httpStatus: 403,
-    //     message: "Account is inactive",
-    //   });
-    // }
-
-    // ===============================
     // PASSWORD CHECK
     // ===============================
     const isPasswordValid = await verifyPassword(loginPassword, user.password);
@@ -129,7 +118,6 @@ export const login = async (req, res) => {
             roleID: user.roleID,
             company_id: companyId,
             company_name: company_name,
-            company_logo: company_logo,
             role_slug: user.role_slug,
           },
         },
