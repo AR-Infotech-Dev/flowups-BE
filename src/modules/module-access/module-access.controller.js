@@ -91,13 +91,13 @@ export const saveModulesAccess = async (req, res) => {
 
     const existingRows = await CommonModel.getMasterDetails(MODULE_TABLE, "*", {
       user_id: data.user_id,
-      // company_id: data.company_id,
+      company_id: data.company_id,
     });
 
     if (!existingRows.length) {
       const createData = {
         user_id: data.user_id,
-        // company_id: data.company_id,
+        company_id: data.company_id,
         permissions: data.permissions,
         created_by: req.user.adminID,
         created_date: toMysqlDateTime(),

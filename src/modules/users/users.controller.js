@@ -248,12 +248,27 @@ export const listNoAuth = async (req, res) => {
       order,
       searchColumns: ["ad.name", "am.name", "r.roleName", 't.userName', "t.email"],
     };
-
+    const default_columns1 = {
+      roleID: {
+        table: "user_role_master",
+        alias: "r",
+        column: "roleName",
+        key2: "roleID",
+        select: "",
+      },
+      default_company: {
+        table: "company_master",
+        alias: "dc",
+        column: "company_name",
+        key2: "company_id",
+        select: "",
+      },
+    };
     const filterData = prepareFilterData({
       filters,
       searchText,
       other: other1,
-      default_columns,
+      default_columns:default_columns1,
       custom_columns,
     });
 
@@ -670,7 +685,7 @@ export const getMarkers = async (req, res) => {
     const company_id = req.user.company_id;
     const selectedEmployeeId = employee_id || user_id || adminID;
     const shouldShowVisits = showVisits === true || showVisits === "true" || showVisits === "y" || showVisits === 1 || showVisits === "1";
-    const where = [ "a.status = 'active'", "a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''", ];
+    const where = ["a.status = 'active'", "a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''",];
     const values = [];
     const visitWhere = [
       "v.status = 'active'",
@@ -701,11 +716,11 @@ export const getMarkers = async (req, res) => {
       visitValues.push(to_date);
     }
 
-    const data = await query(` SELECT a.adminID, a.latitude, a.longitude, a.name, a.alive_data, a.status FROM ${DB_PREFIX}${MODULE_TABLE} a WHERE ${where.join(" AND ")} ORDER BY a.name ASC `, values );
+    const data = await query(` SELECT a.adminID, a.latitude, a.longitude, a.name, a.alive_data, a.status FROM ${DB_PREFIX}${MODULE_TABLE} a WHERE ${where.join(" AND ")} ORDER BY a.name ASC `, values);
     let visits = [];
 
     if (shouldShowVisits) {
-      visits = await query( ` SELECT v.visit_id, v.ticket_id, v.employee_id, v.latitude, v.longitude, v.visit_scheduled_at, v.visited_at, v.visit_details, v.visit_status, a.name AS employee_name, t.ticket_no FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}${MODULE_TABLE} a ON v.employee_id = a.adminID LEFT JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE ${visitWhere.join(" AND ")} AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.latitude != '' AND v.longitude != '' ORDER BY COALESCE(v.visited_at) DESC, v.visit_id DESC `, visitValues );
+      visits = await query(` SELECT v.visit_id, v.ticket_id, v.employee_id, v.latitude, v.longitude, v.visit_scheduled_at, v.visited_at, v.visit_details, v.visit_status, a.name AS employee_name, t.ticket_no FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}${MODULE_TABLE} a ON v.employee_id = a.adminID LEFT JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE ${visitWhere.join(" AND ")} AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.latitude != '' AND v.longitude != '' ORDER BY COALESCE(v.visited_at) DESC, v.visit_id DESC `, visitValues);
     }
 
     return successResponse(res, {
