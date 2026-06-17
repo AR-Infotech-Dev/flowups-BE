@@ -97,7 +97,7 @@ export const saveModulesAccess = async (req, res) => {
     if (!existingRows.length) {
       const createData = {
         user_id: data.user_id,
-        company_id: data.company_id,
+        // company_id: data.company_id,
         permissions: data.permissions,
         created_by: req.user.adminID,
         created_date: toMysqlDateTime(),
