@@ -14,6 +14,6 @@ const router = express.Router();
 router.post("/", getNotifications);
 router.get("/unread-count", getUnreadCount);
 router.get("/read/:id", markAsRead);
-router.post("/read-all", markAllAsRead);
+router.get("/read-all", markAllAsRead);
 
 export default router;

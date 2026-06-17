@@ -86,12 +86,12 @@ export const markAllAsRead = async (userId) => {
   await CommonModel.updateMasterDetails({
     table: MODULE_TABLE,
     data: {
-      is_read: 1,
+      is_read: 'y',
       read_date: new Date(),
     },
     where: {
       user_id: userId,
-      is_read: 0,
+      is_read: 'n',
     },
   });
 };

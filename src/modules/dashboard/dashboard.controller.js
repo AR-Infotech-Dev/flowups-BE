@@ -3,7 +3,7 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 
 export const overview = async (req, res) => {
   try {
-    const data = await DashboardService.getDashboardOverview(req.user);
+    const data = await DashboardService.getDashboardOverview(req.user, req.body);
 
     return successResponse(res, {
       code: 1004,

@@ -172,7 +172,11 @@ const getCustomerReportWhere = ({ body = {}, user = {} } = {}) => {
     where.push("t.company_id = ?");
     values.push(user.company_id);
   }
-
+  // NOT THAT AMC CALLS 
+  where.push("t.amc_call = ?");
+  values.push('n');
+  where.push("t.call_direction = ?");
+  values.push('in');
   return {
     whereSql: `WHERE ${where.join(" AND ")}`,
     values,
@@ -258,10 +262,12 @@ const getCustomerReportTickets = async ({ body, user }) => {
         t.contact_no,
         t.product_serial_number,
         t.product_name,
+        t.modified_by,
         priority.categoryName AS ticket_priority,
         status.categoryName AS ticket_status,
         queryType.categoryName AS query_type,
         assignee.name AS assignee_name,
+        resolver.name AS resolver_name,
         CASE
           WHEN t.ticket_status = ? THEN COALESCE(TIMESTAMPDIFF(HOUR, t.created_date, COALESCE(cl.closed_at, t.modified_date)), 0)
           ELSE ''
@@ -272,12 +278,17 @@ const getCustomerReportTickets = async ({ body, user }) => {
       LEFT JOIN ${DB_PREFIX}categories queryType ON t.query_type = queryType.category_id
       LEFT JOIN ${DB_PREFIX}admin assignee ON t.assignee = assignee.adminID
       LEFT JOIN (
-        SELECT ticket_id, MIN(created_date) AS closed_at
-        FROM ${DB_PREFIX}ticket_history
-        WHERE field_name = 'ticket_status'
-          AND new_value = ?
-        GROUP BY ticket_id
+        SELECT h.ticket_id, h.created_date AS closed_at, h.changed_by AS resolved_by
+        FROM ${DB_PREFIX}ticket_history h
+        INNER JOIN (
+          SELECT ticket_id, MIN(history_id) AS history_id
+          FROM ${DB_PREFIX}ticket_history
+          WHERE field_name = 'ticket_status'
+            AND new_value = ?
+          GROUP BY ticket_id
+        ) first_close ON first_close.history_id = h.history_id
       ) cl ON cl.ticket_id = t.ticket_id
+      LEFT JOIN ${DB_PREFIX}admin resolver ON cl.resolved_by = resolver.adminID
       ${whereSql}
       ORDER BY COALESCE(t.start_date, t.created_date) DESC, t.ticket_id DESC
     `,

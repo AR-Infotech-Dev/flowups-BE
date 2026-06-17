@@ -98,13 +98,13 @@ const default_columns = {
     key2: "company_id",
     select: "",
   },
-  // company_id: {
-  //   table: "company_master",
-  //   alias: "cm",
-  //   column: "company_name",
-  //   key2: "company_id",
-  //   select: "",
-  // },
+  company_id: {
+    table: "company_master",
+    alias: "cm",
+    column: "company_name",
+    key2: "company_id",
+    select: "",
+  },
 };
 
 const custom_columns = {
@@ -125,6 +125,109 @@ const custom_columns = {
 };
 
 export const list = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      searchText = "",
+      getAll = "N",
+      orderBy = "created_date",
+      order = "DESC",
+      company_id = null,
+      filters,
+    } = req.body;
+
+    const limit = 10;
+    const currentPage = Number(page) || 1;
+    const start = (currentPage - 1) * limit;
+
+    const other1 = {
+      orderBy,
+      order,
+      searchColumns: ["ad.name", "am.name", "r.roleName", 't.userName', "t.email", "cm.company_name"],
+    };
+
+    const filterData = prepareFilterData({
+      filters,
+      searchText,
+      other: other1,
+      default_columns,
+      custom_columns,
+    });
+
+    const { select, where, values, join, other } = filterData;
+    const scopedCompanyId = isSuperAdminRole(req.user?.role_slug)
+      ? null
+      : getUserCompanyId(req.user);
+
+    if (scopedCompanyId) {
+      where.push("t.company_id = ?");
+      values.push(scopedCompanyId);
+    }
+    // HIDE SUPER ADMIN FROM LIST
+    where.push("r.slug != ?");
+    values.push('super_admin');
+
+    const total = await CommonModel.getCountsByParameter({
+      table: MODULE_TABLE,
+      where,
+      values,
+      join,
+      other,
+    });
+
+    const totalPages = Math.ceil(total / limit);
+
+    let end = start + limit;
+    if (end > total) end = total;
+
+    let data = [];
+
+    if (getAll === "Y") {
+      data = await CommonModel.GetMasterListDetails({
+        select,
+        table: MODULE_TABLE,
+        where,
+        values,
+        join,
+        other,
+      });
+    } else {
+      data = await CommonModel.GetMasterListDetails({
+        select,
+        table: MODULE_TABLE,
+        where,
+        values,
+        limit,
+        start,
+        join,
+        other,
+      });
+    }
+
+    return successResponse(res, {
+      code: 1004,
+      httpStatus: 200,
+      data: {
+        data,
+        pagination: {
+          total,
+          page: currentPage,
+          limit,
+          totalPages,
+          start: total === 0 ? 0 : start + 1,
+          end,
+        },
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+export const listNoAuth = async (req, res) => {
   try {
     const {
       page = 1,

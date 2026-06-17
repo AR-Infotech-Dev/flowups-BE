@@ -4,18 +4,47 @@ import { getUserCompanyId, isAdminRole, isSuperAdminRole } from "#shared/utils/r
 
 const CLOSED_STATUS_ID = 208;
 const getCompanyId = getUserCompanyId;
+const normalizeDateValue = (value) => {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return String(value).slice(0, 10);
+};
+
+const getDateFilter = (filter = {}) => ({
+  fromDate: normalizeDateValue(filter.from_date || filter.fromDate),
+  toDate: normalizeDateValue(filter.to_date || filter.toDate),
+});
+
 const addCompanyScope = (where, params, user = {}, alias = "t") => {
   const companyId = getCompanyId(user);
+  
   if (companyId) {
     where.push(`${alias}.company_id = ?`);
     params.push(companyId);
   }
 };
-const getTicketScope = (user = {}) => {
+
+const addDateScope = (where, params, filter = {}, alias = "t", column = "created_date") => {
+  const { fromDate, toDate } = getDateFilter(filter);
+
+  if (fromDate) {
+    where.push(`DATE(${alias}.${column}) >= ?`);
+    params.push(fromDate);
+  }
+
+  if (toDate) {
+    where.push(`DATE(${alias}.${column}) <= ?`);
+    params.push(toDate);
+  }
+};
+
+const getTicketScope = (user = {}, filter = {}) => {
   const where = [];
   const params = [];
 
   addCompanyScope(where, params, user, "t");
+  addDateScope(where, params, filter, "t", "created_date");
 
   if (!isAdminRole(user?.role_slug) && user?.adminID) {
     where.push("t.assignee = ?");
@@ -43,8 +72,8 @@ const getSingleCount = async ({ table, alias = "t", user, extraWhere = [], extra
 
   return Number(rows[0]?.total || 0);
 };
-export const getSummary = async (user = {}) => {
-  const { where: ticketWhere, params: ticketParams } = getTicketScope(user);
+export const getSummary = async (user = {} , filter = {}) => {
+  const { where: ticketWhere, params: ticketParams } = getTicketScope(user, filter);
   const closedCondition = "(LOWER(COALESCE(c.categoryName, '')) LIKE '%closed%' OR t.ticket_status = ?)";
   const openCondition = `NOT ${closedCondition}`;
 
@@ -104,7 +133,7 @@ export const getSummary = async (user = {}) => {
        ${getScopedWhereSql([...ticketWhere, "(LOWER(COALESCE(p.categoryName, '')) LIKE '%high%' OR LOWER(COALESCE(p.categoryName, '')) LIKE '%urgent%')"])}`,
       ticketParams
     ),
-    getAmcSummary(user)
+    getAmcSummary(user, filter)
   ]);
 
   const closedTickets = Number(closedTicketsRows[0]?.total || 0);
@@ -150,11 +179,12 @@ export const getSummary = async (user = {}) => {
     { key: "amcExpired", label: "AMC Expired", value: amcSummary.expired, delta: "Needs renewal", tone: "red", redirectTo: "/customers?amc=expired" },
   ];
 };
-export const getAmcSummary = async (user = {}) => {
+export const getAmcSummary = async (user = {} , filter = {}) => {
   const where = [];
   const params = [];
 
   addCompanyScope(where, params, user, "c");
+  addDateScope(where, params, filter, "c", "amc_end_date");
 
   const [activeRows, expiringRows, expiredRows] = await Promise.all([
     query(
@@ -198,18 +228,19 @@ export const getAmcSummary = async (user = {}) => {
     expired: Number(expiredRows[0]?.total || 0),
   };
 };
-export const getAmcHealth = async (user = {}) => {
-  const data = await getAmcSummary(user);
+export const getAmcHealth = async (user = {} , filter = {}) => {
+  const data = await getAmcSummary(user, filter);
   return [
     { label: "Active", value: data.active, color: "#16a34a" },
     { label: "Expiring", value: data.expiring, color: "#d97706" },
     { label: "Expired", value: data.expired, color: "#dc2626" }];
 };
-export const getAmcAlerts = async (user = {}) => {
+export const getAmcAlerts = async (user = {} , filter = {}) => {
   const where = [];
   const params = [];
 
   addCompanyScope(where, params, user, "c");
+  addDateScope(where, params, filter, "c", "amc_end_date");
 
   const rows = await query(
     `SELECT
@@ -240,8 +271,8 @@ export const getAmcAlerts = async (user = {}) => {
     tone: row.days_left < 0 ? "red" : row.days_left <= 7 ? "amber" : "blue",
   }));
 };
-export const getTicketStatus = async (user = {}) => {
-  const { where, params } = getTicketScope(user);
+export const getTicketStatus = async (user = {} , filter = {}) => {
+  const { where, params } = getTicketScope(user, filter);
   const rows = await query(
     `SELECT
         COALESCE(c.categoryName, 'Unknown') AS label,
@@ -261,8 +292,8 @@ export const getTicketStatus = async (user = {}) => {
     color: row.color || "#64748b",
   }));
 };
-export const getTicketTrend = async (user = {}) => {
-  const { where, params } = getTicketScope(user);
+export const getTicketTrend = async (user = {} , filter = {}) => {
+  const { where, params } = getTicketScope(user, filter);
   const rows = await query(
     `SELECT
         DATE_FORMAT(t.created_date, '%b') AS label,
@@ -280,8 +311,8 @@ export const getTicketTrend = async (user = {}) => {
     value: Number(row.value || 0),
   }));
 };
-export const getWorkload = async (user = {}) => {
-  const { where, params } = getTicketScope(user);
+export const getWorkload = async (user = {} , filter = {}) => {
+  const { where, params } = getTicketScope(user, filter);
   const closedCondition = "(LOWER(COALESCE(s.categoryName, '')) LIKE '%closed%' OR t.ticket_status = ?)";
 
   const rows = await query(
@@ -305,8 +336,8 @@ export const getWorkload = async (user = {}) => {
     { label: "Resolved", value: Number(data.resolved || 0), color: "#16a34a" },
   ];
 };
-export const getRecentActivity = async (user = {}) => {
-  const { where, params } = getTicketScope(user);
+export const getRecentActivity = async (user = {} , filter = {}) => {
+  const { where, params } = getTicketScope(user, filter);
   const rows = await query(
     `SELECT
         t.ticket_id,
@@ -331,7 +362,7 @@ export const getRecentActivity = async (user = {}) => {
     tone: String(row.status_name || "").toLowerCase().includes("closed") ? "green" : "blue",
   }));
 };
-export const getProductExpiryAlerts = async (user = {}) => {
+export const getProductExpiryAlerts = async (user = {} , filter = {}) => {
   const where = [];
   const params = [];
 
@@ -356,6 +387,11 @@ export const getProductExpiryAlerts = async (user = {}) => {
 
       const expiryDate = new Date(product.expiry_date);
       const today = new Date();
+      const { fromDate, toDate } = getDateFilter(filter);
+      const expiryDateValue = String(product.expiry_date || "").slice(0, 10);
+
+      if (fromDate && expiryDateValue < fromDate) return;
+      if (toDate && expiryDateValue > toDate) return;
 
       const daysLeft = Math.ceil(
         (expiryDate - today) / (1000 * 60 * 60 * 24)
@@ -384,17 +420,17 @@ export const getProductExpiryAlerts = async (user = {}) => {
     .sort((a, b) => a.days_left - b.days_left)
     .slice(0, 10);
 };
-export const getDashboardOverview = async (user = {}) => {
+export const getDashboardOverview = async (user = {}, filter={}) => {
   const [summary, amcSummary, amcHealth, ticketStatus, ticketTrend, workload, recentActivity, amcAlerts, productExpiryAlerts] = await Promise.all([
-    getSummary(user),
-    getAmcSummary(user),
-    getAmcHealth(user),
-    getTicketStatus(user),
-    getTicketTrend(user),
-    getWorkload(user),
-    getRecentActivity(user),
-    getAmcAlerts(user),
-    getProductExpiryAlerts(user),
+    getSummary(user, filter),
+    getAmcSummary(user,filter),
+    getAmcHealth(user, filter),
+    getTicketStatus(user, filter),
+    getTicketTrend(user, filter),
+    getWorkload(user, filter),
+    getRecentActivity(user, filter),
+    getAmcAlerts(user, filter),
+    getProductExpiryAlerts(user, filter),
   ]);
 
   return {
