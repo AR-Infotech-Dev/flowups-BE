@@ -1,0 +1,377 @@
+# MySQL Ticket Management Triggers
+## 1. trg_ticket_after_insert.sql
+
+DROP TRIGGER IF EXISTS trg_ticket_after_insert;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_ticket_after_insert
+AFTER INSERT ON ab_tickets
+FOR EACH ROW
+INSERT INTO ab_ticket_history
+(
+    ticket_id,
+    action_type,
+    field_name,
+    old_value,
+    new_value,
+    comment,
+    changed_by,
+    created_date
+)
+VALUES
+(
+    NEW.ticket_id,
+    'created',
+    'ticket',
+    NULL,
+    NEW.ticket_status,
+    CONCAT('Ticket created: ', NEW.Description),
+    NEW.created_by,
+    NOW()
+);
+
+DELIMITER ;
+
+
+---
+
+## 2. ab_tickets_notification_after_insert.sql
+
+DROP TRIGGER IF EXISTS ab_tickets_notification_after_insert;
+
+DELIMITER $$
+
+CREATE TRIGGER ab_tickets_notification_after_insert
+AFTER INSERT ON ab_tickets
+FOR EACH ROW
+BEGIN
+
+    DECLARE v_created_by VARCHAR(250);
+
+    SELECT name
+    INTO v_created_by
+    FROM ab_admin
+    WHERE adminID = NEW.created_by
+    LIMIT 1;
+
+    IF NEW.assignee IS NOT NULL
+       AND NEW.assignee <> ''
+       AND NEW.assignee <> NEW.created_by
+    THEN
+
+        INSERT INTO ab_notifications (
+            user_id,
+            sender_id,
+            title,
+            message,
+            notification_type,
+            module_name,
+            reference_id,
+            created_date
+        )
+        VALUES (
+            NEW.assignee,
+            NEW.created_by,
+            'New Ticket Assigned',
+            CONCAT(
+                'Ticket # ',
+                NEW.ticket_no,
+                ' has been assigned to you by ',
+                v_created_by
+            ),
+            'ticket_assigned',
+            'ticket',
+            NEW.ticket_id,
+            NOW()
+        );
+
+    END IF;
+
+END$$
+
+DELIMITER ;
+
+
+---
+
+## 3. ab_tickets_AFTER_UPDATE.sql
+
+DROP TRIGGER IF EXISTS ab_tickets_AFTER_UPDATE;
+
+DELIMITER $$
+
+CREATE TRIGGER ab_tickets_AFTER_UPDATE
+AFTER UPDATE ON ab_tickets
+FOR EACH ROW
+BEGIN
+
+    IF NOT (OLD.ticket_status <=> NEW.ticket_status) THEN
+
+        INSERT INTO ab_ticket_history (
+            ticket_id,
+            action_type,
+            field_name,
+            old_value,
+            new_value,
+            comment,
+            changed_by
+        )
+        VALUES (
+            NEW.ticket_id,
+            'updated',
+            'ticket_status',
+            OLD.ticket_status,
+            NEW.ticket_status,
+            NEW.reason,
+            NEW.modified_by
+        );
+
+    END IF;
+
+    IF NOT (OLD.assignee <=> NEW.assignee) THEN
+
+        INSERT INTO ab_ticket_history (
+            ticket_id,
+            action_type,
+            field_name,
+            old_value,
+            new_value,
+            comment,
+            changed_by
+        )
+        VALUES (
+            NEW.ticket_id,
+            'reassigned',
+            'assignee',
+            OLD.assignee,
+            NEW.assignee,
+            NEW.reason,
+            NEW.modified_by
+        );
+
+    END IF;
+
+    IF NOT (OLD.ticket_priority <=> NEW.ticket_priority) THEN
+
+        INSERT INTO ab_ticket_history (
+            ticket_id,
+            action_type,
+            field_name,
+            old_value,
+            new_value,
+            changed_by
+        )
+        VALUES (
+            NEW.ticket_id,
+            'updated',
+            'ticket_priority',
+            OLD.ticket_priority,
+            NEW.ticket_priority,
+            NEW.modified_by
+        );
+
+    END IF;
+
+    IF NOT (OLD.description <=> NEW.description) THEN
+
+        INSERT INTO ab_ticket_history (
+            ticket_id,
+            action_type,
+            field_name,
+            old_value,
+            new_value,
+            comment,
+            changed_by
+        )
+        VALUES (
+            NEW.ticket_id,
+            'updated',
+            'description',
+            OLD.description,
+            NEW.description,
+            'Description updated',
+            NEW.modified_by
+        );
+
+    END IF;
+
+END$$
+
+DELIMITER ;
+
+---
+
+## 4. trg_ab_tickets_after_update.sql
+
+DROP TRIGGER IF EXISTS trg_ab_tickets_after_update;
+
+DELIMITER $$
+
+CREATE TRIGGER trg_ab_tickets_after_update
+AFTER UPDATE ON ab_tickets
+FOR EACH ROW
+BEGIN
+
+    DECLARE v_status_name VARCHAR(255) DEFAULT '';
+    DECLARE v_created_by VARCHAR(250) DEFAULT '';
+    DECLARE v_modified_by VARCHAR(250) DEFAULT '';
+    DECLARE v_assignee VARCHAR(250) DEFAULT '';
+
+    SELECT IFNULL(categoryName, '')
+    INTO v_status_name
+    FROM ab_categories
+    WHERE category_id = NEW.ticket_status
+    LIMIT 1;
+
+    SELECT IFNULL(name, '')
+    INTO v_created_by
+    FROM ab_admin
+    WHERE adminID = NEW.created_by
+    LIMIT 1;
+
+    SELECT IFNULL(name, '')
+    INTO v_modified_by
+    FROM ab_admin
+    WHERE adminID = NEW.modified_by
+    LIMIT 1;
+
+    SELECT IFNULL(name, '')
+    INTO v_assignee
+    FROM ab_admin
+    WHERE adminID = NEW.assignee
+    LIMIT 1;
+
+    IF NEW.assignee IS NOT NULL
+       AND NEW.assignee <> ''
+       AND (OLD.assignee IS NULL OR OLD.assignee <> NEW.assignee)
+       AND NEW.assignee <> NEW.created_by
+    THEN
+
+        INSERT INTO ab_notifications
+        (
+            user_id,
+            title,
+            message,
+            module_name,
+            reference_id,
+            is_read,
+            created_date
+        )
+        VALUES
+        (
+            NEW.assignee,
+            'New Ticket Assigned',
+            CONCAT(
+                'Ticket #', NEW.ticket_no,
+                ' has been assigned to you by ',
+                v_modified_by
+            ),
+            'ticket',
+            NEW.ticket_id,
+            'n',
+            NOW()
+        );
+
+    END IF;
+
+    IF NEW.assignee IS NOT NULL
+       AND NEW.assignee <> ''
+       AND (OLD.assignee IS NULL OR OLD.assignee <> NEW.assignee)
+       AND NEW.assignee <> NEW.created_by
+    THEN
+
+        INSERT INTO ab_notifications
+        (
+            user_id,
+            title,
+            message,
+            module_name,
+            reference_id,
+            is_read,
+            created_date
+        )
+        VALUES
+        (
+            NEW.created_by,
+            'New Ticket Assigned',
+            CONCAT(
+                'Ticket #', NEW.ticket_no,
+                ' has been assigned to ',
+                v_assignee
+            ),
+            'ticket',
+            NEW.ticket_id,
+            'n',
+            NOW()
+        );
+
+    END IF;
+
+    IF NOT (OLD.ticket_status <=> NEW.ticket_status) THEN
+
+        IF UPPER(v_status_name) = 'CLOSED' THEN
+
+            INSERT INTO ab_notifications
+            (
+                user_id,
+                title,
+                message,
+                module_name,
+                reference_id,
+                is_read,
+                created_date
+            )
+            VALUES
+            (
+                NEW.created_by,
+                'Ticket Closed',
+                CONCAT(
+                    'Your ticket #', NEW.ticket_no,
+                    ' has been closed by ',
+                    v_modified_by
+                ),
+                'ticket',
+                NEW.ticket_id,
+                'n',
+                NOW()
+            );
+
+        END IF;
+
+    END IF;
+
+    IF NOT (OLD.due_date <=> NEW.due_date) THEN
+
+        INSERT INTO ab_notifications
+        (
+            user_id,
+            title,
+            message,
+            module_name,
+            reference_id,
+            is_read,
+            created_date
+        )
+        VALUES
+        (
+            NEW.created_by,
+            'Ticket Due Date Updated',
+            CONCAT(
+                'Due date for ticket #', NEW.ticket_no,
+                ' changed to ',
+                DATE_FORMAT(NEW.due_date, '%d %M %Y'),
+                ' by ',
+                v_modified_by
+            ),
+            'ticket',
+            NEW.ticket_id,
+            'n',
+            NOW()
+        );
+
+    END IF;
+
+END$$
+
+DELIMITER ;

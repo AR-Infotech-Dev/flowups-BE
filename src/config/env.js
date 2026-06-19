@@ -2,13 +2,41 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const isProduction = process.env.NODE_ENV === "production";
+// const requiredProductionEnv = [
+//   "APP_URL",
+//   "APP_FE_URL",
+//   "SESSION_SECRET",
+//   "JWT_SECRET",
+//   "DB_HOST",
+//   "DB_USER",
+//   "DB_PASSWORD",
+//   "DB_NAME",
+//   // "EMAIL_USER",
+//   // "EMAIL_PASS",
+// ];
+
+// if (isProduction) {
+//   const missingEnv = requiredProductionEnv.filter((key) => !process.env[key]);
+
+//   if (missingEnv.length > 0) {
+//     throw new Error(`Missing required production environment variables: ${missingEnv.join(", ")}`);
+//   }
+// }
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 3000),
   appName: process.env.APP_NAME || "flowupS CallDesk",
   appUrl: process.env.APP_URL || "http://localhost:3000",
+  appLink: process.env.APP_FE_URL || "http://localhost:5173",
   // appFEUrl: process.env.APP_FE_URL || "http://192.168.1.23:5173",
   appFEUrl: process.env.APP_FE_URL || "http://localhost:5173",
+  allowedOrigins: (process.env.ALLOWED_ORIGINS || process.env.APP_FE_URL || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+  baseUrl: process.env.APP_URL || "http://localhost:3000",
   logoUrl: process.env.APP_URL || "http://localhost:3000",
   sessionSecret: process.env.SESSION_SECRET || "change-me",
   dbHost: process.env.DB_HOST || "localhost",
@@ -29,4 +57,3 @@ export const env = {
   EMAIL_USER: process.env.EMAIL_USER || "ranjitambare7@gmail.com",
   EMAIL_PASS: process.env.EMAIL_PASS || "kxqw bais cktp nvrl",
 };
-

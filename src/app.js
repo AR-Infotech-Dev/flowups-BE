@@ -4,20 +4,29 @@ import morgan from "morgan";
 import session from "express-session";
 import cookieParser from "cookie-parser";
 import path from "path";
-import routes from "./routes/index.js";
+import routes from "#routes/index.js";
 // import {routes} from "./routes"
 // const routes = require('./routes');
 import { fileURLToPath } from "url";
-import { env } from "./config/env.js";
-import { legacyConfig } from "./config/legacy.js";
-import { notFoundHandler } from "./middlewares/notFound.js";
-import { errorHandler } from "./middlewares/errorHandler.js";
+import { env } from "#config/env.js";
+import { legacyConfig } from "#config/legacy.js";
+import { notFoundHandler } from "#middlewares/notFound.js";
+import { errorHandler } from "#middlewares/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.static("public"));
-app.use(cors({ origin: true, credentials: true }));
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || env.allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error("Not allowed by CORS"));
+  },
+  credentials: true,
+}));
 // app.use(morgan("dev"));
 morgan.token("ip", (req) => {
   return req.ip;
