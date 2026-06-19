@@ -1,3 +1,4 @@
+import { DB_PREFIX, query } from "#config/database.js";
 import * as CommonModel from "#shared/models/common.model.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { MODULE_TABLE } from "./ticket.constants.js";
@@ -56,5 +57,32 @@ export const getTicketNotificationDetails = async (ticketId) => {
   return rows?.[0] || null;
 };
 
-export const setTicketFeedbackToken = (ticketId, feedbackToken) =>
-  CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { feedback_token: feedbackToken }, where: { ticket_id: ticketId } });
+export const setTicketFeedbackToken = (ticketId, feedbackToken) => CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: { feedback_token: feedbackToken }, where: { ticket_id: ticketId } });
+export const getLastTicketNoByPattern = async ({ prefix, company_id, resetKey, plainPattern = "", scopeStart = "", scopeEnd = "" }) => {
+  if (!company_id || !prefix) {
+    return null;
+  }
+
+  const where = ["company_id = ?", "ticket_no LIKE ?"];
+  const values = [
+    company_id ?? null,
+    resetKey ? `${prefix}-${resetKey}%` : `${prefix}-%`
+  ];
+
+  if (plainPattern && scopeStart && scopeEnd) {
+    where[1] = `(${where[1]} OR (ticket_no REGEXP ? AND DATE(created_date) BETWEEN ? AND ?))`;
+    values.push(plainPattern, scopeStart, scopeEnd);
+  }
+
+  const sql = `
+    SELECT ticket_no
+    FROM ${DB_PREFIX}tickets
+    WHERE ${where.join(" AND ")}
+    ORDER BY ticket_id DESC
+    LIMIT 1
+  `;
+
+  const rows = await query(sql, values);
+
+  return rows?.[0]?.ticket_no || null;
+};

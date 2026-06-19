@@ -13,3 +13,6 @@ export const TICKET_SEARCH_COLUMNS = [
   "ad.name",
   "am.name",
 ];
+export const DEFAULT_TICKET_PREFIX = "TKT";
+export const DEFAULT_TICKET_PADDING = 4;
+export const ALLOWED_RESET_PREFERENCES = ["none", "daily", "monthly", "yearly"];

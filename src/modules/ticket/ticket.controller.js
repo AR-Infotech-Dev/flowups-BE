@@ -14,7 +14,6 @@ import {
   createTicket,
   deleteTickets,
   getAdminName,
-  getNextTicketId,
   getTicketAssigneeStatusSnapshot,
   getTicketById,
   getTicketRecord,
@@ -32,6 +31,7 @@ import {
   resolveTicketActiveAmc,
   sendEmailToClient,
 } from "./ticket.utils.js";
+import { generateTicketNumber } from "./ticket-number.helper.js";
 import { ticketValidationRules } from "./ticket.validation.js";
 
 export const list = async (req, res) => {
@@ -175,15 +175,16 @@ const createTicketDetails = async (req, res) => {
     return failureResponse(res, { code: 2001, httpStatus: 400, message: validation.message });
   }
 
-  const nextId = await getNextTicketId();
+  const companyId = req.user.company_id || req.body.company_id || null;
+  const ticketNo = await generateTicketNumber({ companyId });
   const active_amc = await resolveTicketActiveAmc(req.body.client_id);
   const data = await buildTablePayload(MODULE_TABLE, {
     ...prepareTicketBody(req.body),
     active_amc,
     created_by: req.user.adminID,
     created_date: toMysqlDateTime(),
-    ticket_no: `TKT-${nextId}`,
-    company_id: req.user.company_id,
+    ticket_no: ticketNo,
+    company_id: companyId,
   });
 
   const result = await createTicket(data);
