@@ -98,13 +98,7 @@ const default_columns = {
     key2: "company_id",
     select: "",
   },
-  // company_id: {
-  //   table: "company_master",
-  //   alias: "cm",
-  //   column: "company_name",
-  //   key2: "company_id",
-  //   select: "",
-  // },
+
 };
 
 const custom_columns = {
@@ -229,97 +223,31 @@ export const list = async (req, res) => {
 };
 export const listNoAuth = async (req, res) => {
   try {
-    const {
-      page = 1,
-      searchText = "",
-      getAll = "N",
-      orderBy = "created_date",
-      order = "DESC",
-      company_id = null,
-      filters,
-    } = req.body;
-
-    const limit = 10;
-    const currentPage = Number(page) || 1;
-    const start = (currentPage - 1) * limit;
-
-    const other1 = {
-      orderBy,
-      order,
-      searchColumns: ["ad.name", "am.name", "r.roleName", 't.userName', "t.email"],
-    };
-
-    const filterData = prepareFilterData({
-      filters,
-      searchText,
-      other: other1,
-      default_columns,
-      custom_columns,
-    });
-
-    const { select, where, values, join, other } = filterData;
-    const scopedCompanyId = isSuperAdminRole(req.user?.role_slug)
-      ? null
-      : getUserCompanyId(req.user);
-
-    if (scopedCompanyId) {
-      where.push("t.company_id = ?");
-      values.push(scopedCompanyId);
+    const { searchText = "", getAll = "N", orderBy = "created_date", order = "DESC", company_id = null, } = req.body;
+    const text = String(searchText).trim();
+    const where = [];
+    const values = [];
+    const list = 'name, adminID, company_id, email, roleID ';
+    const isCompanyWise = true;
+    const wherec = 'name'
+   
+    if (text) {
+      where.push(`t.${wherec} LIKE ?`);
+      values.push(`%${text}%`);
     }
-    // HIDE SUPER ADMIN FROM LIST
-    where.push("r.slug != ?");
-    values.push('super_admin');
-
-    const total = await CommonModel.getCountsByParameter({
-      table: MODULE_TABLE,
-      where,
-      values,
-      join,
-      other,
-    });
-
-    const totalPages = Math.ceil(total / limit);
-
-    let end = start + limit;
-    if (end > total) end = total;
-
-    let data = [];
-
-    if (getAll === "Y") {
-      data = await CommonModel.GetMasterListDetails({
-        select,
-        table: MODULE_TABLE,
-        where,
-        values,
-        join,
-        other,
-      });
-    } else {
-      data = await CommonModel.GetMasterListDetails({
-        select,
-        table: MODULE_TABLE,
-        where,
-        values,
-        limit,
-        start,
-        join,
-        other,
-      });
+    if (!isSuperAdminRole(req.user?.role_slug)) {
+      where.push(`t.company_id = ${req.user.company_id} `);
     }
+    if (!isSuperAdminRole(req.user?.role_slug) && isCompanyWise === true) {
+      where.push(`t.company_id = ${req.user.company_id} `);
+    }
+    const result = await CommonModel.GetMasterListDetails({ select: list, table: MODULE_TABLE, where, values });
 
     return successResponse(res, {
       code: 1004,
       httpStatus: 200,
       data: {
-        data,
-        pagination: {
-          total,
-          page: currentPage,
-          limit,
-          totalPages,
-          start: total === 0 ? 0 : start + 1,
-          end,
-        },
+        data: result,
       },
     });
   } catch (error) {
@@ -670,7 +598,7 @@ export const getMarkers = async (req, res) => {
     const company_id = req.user.company_id;
     const selectedEmployeeId = employee_id || user_id || adminID;
     const shouldShowVisits = showVisits === true || showVisits === "true" || showVisits === "y" || showVisits === 1 || showVisits === "1";
-    const where = [ "a.status = 'active'", "a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''", ];
+    const where = ["a.status = 'active'", "a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''",];
     const values = [];
     const visitWhere = [
       "v.status = 'active'",
@@ -701,11 +629,11 @@ export const getMarkers = async (req, res) => {
       visitValues.push(to_date);
     }
 
-    const data = await query(` SELECT a.adminID, a.latitude, a.longitude, a.name, a.alive_data, a.status FROM ${DB_PREFIX}${MODULE_TABLE} a WHERE ${where.join(" AND ")} ORDER BY a.name ASC `, values );
+    const data = await query(` SELECT a.adminID, a.latitude, a.longitude, a.name, a.alive_data, a.status FROM ${DB_PREFIX}${MODULE_TABLE} a WHERE ${where.join(" AND ")} ORDER BY a.name ASC `, values);
     let visits = [];
 
     if (shouldShowVisits) {
-      visits = await query( ` SELECT v.visit_id, v.ticket_id, v.employee_id, v.latitude, v.longitude, v.visit_scheduled_at, v.visited_at, v.visit_details, v.visit_status, a.name AS employee_name, t.ticket_no FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}${MODULE_TABLE} a ON v.employee_id = a.adminID LEFT JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE ${visitWhere.join(" AND ")} AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.latitude != '' AND v.longitude != '' ORDER BY COALESCE(v.visited_at) DESC, v.visit_id DESC `, visitValues );
+      visits = await query(` SELECT v.visit_id, v.ticket_id, v.employee_id, v.latitude, v.longitude, v.visit_scheduled_at, v.visited_at, v.visit_details, v.visit_status, a.name AS employee_name, t.ticket_no FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}${MODULE_TABLE} a ON v.employee_id = a.adminID LEFT JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE ${visitWhere.join(" AND ")} AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.latitude != '' AND v.longitude != '' ORDER BY COALESCE(v.visited_at) DESC, v.visit_id DESC `, visitValues);
     }
 
     return successResponse(res, {
