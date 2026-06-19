@@ -1,4 +1,4 @@
-import { failureResponse } from "../utils/apiResponse.js";
+import { failureResponse } from "#shared/utils/apiResponse.js";
 
 const buckets = new Map();
 

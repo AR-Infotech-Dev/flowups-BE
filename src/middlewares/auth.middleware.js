@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
-import { env } from "../config/env.js";
-import { failureResponse } from "../utils/apiResponse.js";
-import { getActiveSessionId } from "../utils/activeSession.js";
+import { env } from "#config/env.js";
+import { failureResponse } from "#shared/utils/apiResponse.js";
+import { getActiveSessionId } from "#shared/utils/activeSession.js";
 
 // export const verifyToken = (req, res, next) => {
 //     try {
@@ -35,8 +35,8 @@ import { getActiveSessionId } from "../utils/activeSession.js";
 export const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization || "";
+    const isMobile = Boolean(req.headers.ismobile) || false;
     const cookieToken = req.cookies?.access_token;
-
     const bearerToken = authHeader.startsWith("Bearer ")
       ? authHeader.split(" ")[1]
       : "";
@@ -61,8 +61,7 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    const activeSessionId = await getActiveSessionId(decoded.adminID);
-
+    const activeSessionId = await getActiveSessionId(decoded.adminID,isMobile);
     if (!activeSessionId || activeSessionId !== decoded.active_session_id) {
       return failureResponse(res, {
         code: 2009,

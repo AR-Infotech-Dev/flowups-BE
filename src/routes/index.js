@@ -1,30 +1,32 @@
 import express from "express";
 
-import systemRoutes from "./system.routes.js";
-import loginRoutes from "./login.routes.js";
-import usersRoutes from "./user.routes.js";
-import menuRoutes from "./menu.routes.js";
-import ticketRoutes from "./ticket.routes.js";
-import commentsRoutes from "./comments.routes.js";
-import categoryRoutes from "./category.routes.js";
-import notificationRoutes from "./notification.routes.js";
-import feedbackRoutes from "./feedback.routes.js";
-import customerRoutes from "./customer.routes.js";
-import companyRoutes from "./company.routes.js";
-import productRoutes from "./product.routes.js";
-import moduleAccessRoutes from "./moduleAccess.routes.js";
-import dashboardRoutes from "./dashboard.routes.js";
-import bootstrapRoutes from "./bootstrap.routes.js";
-import amcReminderRoutes from "./amcReminder.routes.js";
-import reportsRoutes from "./reports.routes.js";
+import systemRoutes from "#modules/system/system.routes.js";
+import loginRoutes from "#modules/auth/auth.routes.js";
+import usersRoutes from "#modules/users/users.routes.js";
+import menuRoutes from "#modules/menus/menus.routes.js";
+import commentsRoutes from "#modules/ticket/ticket-comments.routes.js";
+import notificationRoutes from "#modules/notifications/notifications.routes.js";
+import feedbackRoutes from "#modules/feedback/feedback.routes.js";
+import customerRoutes from "#modules/customer/customer.routes.js";
+import ticketRoutes from "#modules/ticket/ticket.routes.js";
+import categoryRoutes from "#modules/categories/categories.routes.js";
+import companyRoutes from "#modules/company/company.routes.js";
+import productRoutes from "#modules/product/product.routes.js";
+import moduleAccessRoutes from "#modules/module-access/module-access.routes.js";
+import dashboardRoutes from "#modules/dashboard/dashboard.routes.js";
+import bootstrapRoutes from "#modules/bootstrap/bootstrap.routes.js";
+import amcReminderRoutes from "#modules/amc-reminders/amc-reminder.routes.js";
+import reportsRoutes from "#modules/reports/reports.routes.js";
+import * as ticketVisitsController from "#modules/ticket/ticket-visits.controller.js";
 
-import {verifyToken} from "../middlewares/auth.middleware.js"
+import {verifyToken} from "#middlewares/auth.middleware.js"
 
 const router = express.Router();
 
 router.use('/', loginRoutes);
 router.use('/',feedbackRoutes);
 router.use('/',bootstrapRoutes);
+router.post('/tickets/visits/customer-confirm', ticketVisitsController.customerConfirmVisit);
 router.use('/',verifyToken, commentsRoutes);
 router.use('/users',verifyToken, usersRoutes);
 router.use('/system',verifyToken, systemRoutes);

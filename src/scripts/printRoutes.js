@@ -1,4 +1,4 @@
-import { legacyRoutes } from "../routes/legacy.routes.js";
+import { legacyRoutes } from "#routes/legacy.routes.js";
 
 for (const route of legacyRoutes) {
   console.log(`${route.uriPattern} -> ${route.target} -> ${route.expressPath}`);
