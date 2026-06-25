@@ -40,14 +40,15 @@ const getTicketNumberSettings = async (companyId = null) => {
 const getDateParts = (date = new Date()) => {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
+  const monthLabel = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
   const day = String(date.getDate()).padStart(2, "0");
 
-  return { year, month, day };
+  return { year, month, monthLabel, day };
 };
 
 const getDisplayDateKey = (date = new Date()) => {
-  const { year, month, day } = getDateParts(date);
-  return `${year}${month}${day}`;
+  const { year, monthLabel, day } = getDateParts(date);
+  return `${day}${monthLabel}${year}`;
 };
 
 const toMysqlDate = (date = new Date()) => {
@@ -58,11 +59,11 @@ const toMysqlDate = (date = new Date()) => {
 const escapeRegExp = (value = "") => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const getResetKey = (resetPreference, date = new Date()) => {
-  const { year, month, day } = getDateParts(date);
+  const { year, monthLabel, day } = getDateParts(date);
 
   if (resetPreference === "none") return "";
-  if (resetPreference === "daily") return `${year}${month}${day}`;
-  if (resetPreference === "monthly") return `${year}${month}`;
+  if (resetPreference === "daily") return `${day}${monthLabel}${year}`;
+  if (resetPreference === "monthly") return `${monthLabel}${year}`;
   if (resetPreference === "yearly") return `${year}`;
 
   return `${year}`;
@@ -110,7 +111,7 @@ export const buildTicketNumber = async ({ settings = {}, date = new Date() } = {
     prefix,
     resetKey,
     company_id: settings.company_id,
-    plainPattern: includeYear ? `^${escapeRegExp(prefix)}-[0-9]+$` : "",
+    plainPattern: includeYear ? `^${escapeRegExp(prefix)}-([0-9]+|[0-9]{4}[0-9]{2}[0-9]{2}-[0-9]+|[0-9]{4}[0-9]{2}-[0-9]+|[0-9]{4}[A-Z]{3}[0-9]{2}-[0-9]+|[0-9]{4}[A-Z]{3}-[0-9]+)$` : "",
     scopeStart,
     scopeEnd,
   });
