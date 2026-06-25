@@ -97,6 +97,11 @@ const getSequence = (lastTicketNumber, padding) => {
   return String(nextSequence).padStart(padding, "0");
 };
 
+const getTicketNumberLookupPattern = (prefix = "") => {
+  const safePrefix = escapeRegExp(prefix);
+  return `^${safePrefix}-([0-9]+|[0-9]{4}[0-9]{2}[0-9]{2}-[0-9]+|[0-9]{4}[0-9]{2}-[0-9]+|[0-9]{4}[A-Z]{3}[0-9]{2}-[0-9]+|[0-9]{4}[A-Z]{3}-[0-9]+|[0-9]{2}[A-Z]{3}[0-9]{4}-[0-9]+|[A-Z]{3}[0-9]{4}-[0-9]+)$`;
+};
+
 export const buildTicketNumber = async ({ settings = {}, date = new Date() } = {}) => {
   const prefix = normalizePrefix(settings.ticket_prefix);
   const includeYear = isEnabled(settings.ticket_include_year, true);
@@ -111,7 +116,7 @@ export const buildTicketNumber = async ({ settings = {}, date = new Date() } = {
     prefix,
     resetKey,
     company_id: settings.company_id,
-    plainPattern: includeYear ? `^${escapeRegExp(prefix)}-([0-9]+|[0-9]{4}[0-9]{2}[0-9]{2}-[0-9]+|[0-9]{4}[0-9]{2}-[0-9]+|[0-9]{4}[A-Z]{3}[0-9]{2}-[0-9]+|[0-9]{4}[A-Z]{3}-[0-9]+)$` : "",
+    plainPattern: includeYear ? getTicketNumberLookupPattern(prefix) : "",
     scopeStart,
     scopeEnd,
   });
