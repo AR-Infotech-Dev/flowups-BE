@@ -357,6 +357,10 @@ export const getAdminDetails = async (req, res) => {
         } else {
           delete data.password;
         }
+        
+        if (data.userName) {
+          delete data.password;
+        }
 
         data = await buildTablePayload(MODULE_TABLE, {
           ...data,

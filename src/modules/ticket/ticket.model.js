@@ -16,21 +16,19 @@ export const changeTicketStatus = (ids = [], status = "Y") => CommonModel.change
 
 export const getNextTicketId = () => CommonModel.getNextID(MODULE_TABLE, "ticket_id");
 
-export const getTicketAssigneeStatusSnapshot = (ticketId) =>
-  CommonModel.getMasterDetails(MODULE_TABLE, "assignee AS old_assignee, ticket_status AS old_ticket_status, due_date AS old_due_date", { ticket_id: ticketId });
+export const getTicketAssigneeStatusSnapshot = (ticketId) => CommonModel.getMasterDetails(MODULE_TABLE, "assignee AS old_assignee, ticket_status AS old_ticket_status, due_date AS old_due_date, created_by, modified_by, ticket_no", { ticket_id: ticketId });
 
 export const getTicketRecord = (ticketId, select = "*") => CommonModel.getSpecificDetails(MODULE_TABLE, select, { ticket_id: ticketId });
 
 export const getAdminName = (adminID) => CommonModel.getSpecificDetails("admin", "name", { adminID });
 
-export const getCustomerAmcFields = (customerId) =>
-  CommonModel.getSpecificDetails("customer", "is_amc, amc_start_date, amc_end_date, amc_term_period", { customer_id: customerId });
+export const getCategoryName = (categoryID) => CommonModel.getSpecificDetails("categories", "categoryName as name", { category_id : categoryID });
 
-export const countTickets = ({ where, values, join, other }) =>
-  CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other });
+export const getCustomerAmcFields = (customerId) => CommonModel.getSpecificDetails("customer", "is_amc, amc_start_date, amc_end_date, amc_term_period", { customer_id: customerId });
 
-export const listTickets = ({ select, where, values, join, other, limit, start }) =>
-  CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, limit, start, join, other });
+export const countTickets = ({ where, values, join, other }) => CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other });
+
+export const listTickets = ({ select, where, values, join, other, limit, start }) => CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, limit, start, join, other });
 
 export const getTicketNotificationDetails = async (ticketId) => {
   const filterData = prepareFilterData({ default_columns: defaultColumns, custom_columns: customColumns });
@@ -38,6 +36,7 @@ export const getTicketNotificationDetails = async (ticketId) => {
   const select = `
     t.ticket_no,
     t.company_id,
+    t.description,
     DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date,
     DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date,
     a.name AS assignedTo,

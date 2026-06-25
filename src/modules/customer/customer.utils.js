@@ -21,6 +21,37 @@ export const normalizeProductIds = (value) => {
     .filter(Boolean);
 };
 
+const splitImportValues = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(String).map((item) => item.trim()).filter(Boolean);
+  }
+
+  if (value === undefined || value === null) {
+    return [];
+  }
+
+  const text = String(value).trim();
+  if (!text) return [];
+
+  return text
+    .split(text.includes("|") ? "|" : ",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const splitImportAddOnGroups = (value) => {
+  if (value === undefined || value === null) return [];
+
+  return String(value)
+    .split("|")
+    .map((group) =>
+      group
+        .split(/[+,]/)
+        .map((item) => item.trim())
+        .filter(Boolean)
+    );
+};
+
 export const normalizeAddOns = (value = []) => {
   if (Array.isArray(value)) {
     return value
@@ -93,6 +124,33 @@ export const parseCustomerProducts = (value) => {
   }
 };
 
+export const normalizeCustomerContacts = (value) => {
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return normalizeCustomerContacts(parsed);
+    } catch {
+      return [];
+    }
+  }
+
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => ({
+      contact_id: item?.contact_id || null,
+      name: String(item?.name || item?.contact_person || "").trim(),
+      designation: String(item?.designation || "").trim(),
+      mobile_no: String(item?.mobile_no || item?.contact_no || "").trim(),
+      email: String(item?.email || "").trim(),
+      is_primary: String(item?.is_primary || "n").toLowerCase() === "y" || item?.is_primary === true ? "y" : "n",
+      department: String(item?.department || "").trim(),
+    }))
+    .filter((item) => item.name || item.designation || item.mobile_no || item.email || item.department);
+};
+
 const normalizeHeader = (value = "") =>
   String(value || "")
     .toLowerCase()
@@ -145,11 +203,12 @@ const normalizeImportDate = (value) => {
   return text;
 };
 
-const buildCustomerProductsFromImport = (productIdsValue, serialNumbersValue, productNamesValue, expiryDatesValue) => {
-  const productIds = normalizeProductIds(productIdsValue);
-  const serialNumbers = normalizeProductIds(serialNumbersValue);
-  const productNames = normalizeProductIds(productNamesValue);
-  const expiryDates = normalizeProductIds(expiryDatesValue).map(normalizeImportDate);
+const buildCustomerProductsFromImport = (productIdsValue, serialNumbersValue, productNamesValue, expiryDatesValue, addOnsValue) => {
+  const productIds = splitImportValues(productIdsValue);
+  const serialNumbers = splitImportValues(serialNumbersValue);
+  const productNames = splitImportValues(productNamesValue);
+  const expiryDates = splitImportValues(expiryDatesValue).map(normalizeImportDate);
+  const addOnGroups = splitImportAddOnGroups(addOnsValue);
   const maxRows = Math.max(productIds.length, productNames.length, serialNumbers.length, expiryDates.length);
 
   return Array.from({ length: maxRows }, (_, index) => ({
@@ -157,23 +216,48 @@ const buildCustomerProductsFromImport = (productIdsValue, serialNumbersValue, pr
     product_name: productNames[index] || "",
     expiry_date: expiryDates[index] || "",
     serial_number: serialNumbers[index] || "",
+    add_ons: addOnGroups[index] || [],
   })).filter((item) => item.product_id || item.product_name || item.serial_number || item.expiry_date);
+};
+
+const buildCustomerContactsFromImport = (rowData = {}) => {
+  const names = splitImportValues(rowData.contact_names || rowData.contact_person);
+  const mobiles = splitImportValues(rowData.contact_mobiles || rowData.mobile_no);
+  const emails = splitImportValues(rowData.contact_emails || rowData.email);
+  const designations = splitImportValues(rowData.contact_designations);
+  const departments = splitImportValues(rowData.contact_departments);
+  const primaryMobile = String(rowData.primary_contact_mobile || mobiles[0] || "").trim();
+  const maxRows = Math.max(names.length, mobiles.length, emails.length, designations.length, departments.length);
+
+  return Array.from({ length: maxRows }, (_, index) => {
+    const mobile = mobiles[index] || "";
+
+    return {
+      name: names[index] || "",
+      mobile_no: mobile,
+      email: emails[index] || "",
+      designation: designations[index] || "",
+      department: departments[index] || "",
+      is_primary: String(mobile || "").trim() === primaryMobile ? "y" : "n",
+    };
+  }).filter((item) => item.name || item.mobile_no || item.email || item.designation || item.department);
 };
 
 export const rowLooksEmpty = (row = []) => row.every((cell) => getCellValue(cell) === "");
 
 export const rowLooksLikeTemplateKeyRow = (data = {}) =>
   String(data.name || "").toLowerCase() === "name" ||
-  String(data.mobile_no || "").toLowerCase() === "mobile_no";
+  String(data.mobile_no || data.contact_mobiles || "").toLowerCase() === "mobile_no" ||
+  String(data.contact_mobiles || "").toLowerCase() === "contact_mobiles";
 
 export const rowLooksLikeSampleRow = (data = {}) =>
   String(data.name || "") === "ABC Traders" &&
-  String(data.mobile_no || "") === "9876543210";
+  ["9876543210", "9876543210|9876543211"].includes(String(data.mobile_no || data.contact_mobiles || ""));
 
 export const findImportHeaderIndex = (rows = []) =>
   rows.findIndex((row) => {
     const keys = row.map((cell) => importHeaderMap[normalizeHeader(cell)]).filter(Boolean);
-    return keys.includes("name") && keys.includes("mobile_no");
+    return keys.includes("name") && (keys.includes("contact_mobiles") || keys.includes("mobile_no"));
   });
 
 export const buildImportDataFromRow = (headers = [], row = []) => {
@@ -194,12 +278,15 @@ export const buildCustomerPayloadFromImport = (rowData = {}, user = {}) => {
     rowData.serial_numbers,
     rowData.product_names,
     rowData.product_expiry_dates,
+    rowData.product_add_ons,
   );
+  const customerContacts = buildCustomerContactsFromImport(rowData);
+  const primaryContact = customerContacts.find((contact) => contact.is_primary === "y") || customerContacts[0] || null;
   const payload = {
     name: rowData.name,
-    contact_person: rowData.contact_person || null,
-    mobile_no: rowData.mobile_no,
-    email: rowData.email || null,
+    contact_person: primaryContact?.name || rowData.contact_person || null,
+    mobile_no: primaryContact?.mobile_no || rowData.mobile_no || null,
+    email: primaryContact?.email || rowData.email || null,
     wa_no: rowData.wa_no || null,
     address: rowData.address || null,
     pan_number: rowData.pan_number || null,
@@ -213,6 +300,8 @@ export const buildCustomerPayloadFromImport = (rowData = {}, user = {}) => {
     amc_start_date: normalizeImportDate(rowData.amc_start_date),
     amc_end_date: normalizeImportDate(rowData.amc_end_date),
     customer_products: JSON.stringify(customerProducts),
+    customer_contacts: customerContacts,
+    contact_persons: customerContacts,
     created_by: user.adminID || null,
     company_id: user.company_id || rowData.company_id || null,
     created_date: toMysqlDateTime(),

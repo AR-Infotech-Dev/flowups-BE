@@ -10,6 +10,92 @@ export const updateCustomer = (customerId, data) => CommonModel.updateMasterDeta
 
 export const deleteCustomers = (ids = []) => CommonModel.deleteMasterDetails({table: MODULE_TABLE,where: { customer_id: ids },});
 
+export const getCustomerContacts = (customerId) => CommonModel.getMasterDetails("customer_contacts", "name, mobile_no ,email, department, designation, is_primary", { customer_id: customerId });
+
+const parseStoredCustomerProducts = (value) => {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+export const findCustomerProductSerialConflicts = async ({ serialNumbers = [], excludeCustomerId = null } = {}) => {
+  const serialSet = new Set(
+    serialNumbers
+      .map((serial) => String(serial || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  if (!serialSet.size) return [];
+
+  const rows = await query(
+    `
+      SELECT customer_id, name, customer_products
+      FROM ${DB_PREFIX}${MODULE_TABLE}
+      ${excludeCustomerId ? "WHERE customer_id <> ?" : ""}
+    `,
+    excludeCustomerId ? [excludeCustomerId] : [],
+  );
+
+  const conflicts = [];
+
+  rows.forEach((customer) => {
+    parseStoredCustomerProducts(customer.customer_products).forEach((product) => {
+      const serial = String(product?.serial_number || "").trim();
+
+      if (serial && serialSet.has(serial.toLowerCase())) {
+        conflicts.push({
+          serial_number: serial,
+          customer_id: customer.customer_id,
+          customer_name: customer.name,
+          product_name: product?.product_name || "",
+        });
+      }
+    });
+  });
+
+  return conflicts;
+};
+
+export const replaceCustomerContacts = async ({ customerId, contacts = [], user = {} }) => { 
+  await CommonModel.deleteMasterDetails({ table: "customer_contacts", where: { customer_id: customerId } });
+
+  if (!contacts.length) {
+    return 0;
+  }
+
+  const nowSql = new Date().toISOString().slice(0, 19).replace("T", " ");
+  let inserted = 0;
+
+  for (const contact of contacts) {
+    const result = await CommonModel.saveMasterDetails({
+      table: "customer_contacts",
+      data: {
+        customer_id: customerId,
+        name: contact.name || null,
+        designation: contact.designation || null,
+        mobile_no: contact.mobile_no || null,
+        email: contact.email || null,
+        is_primary: contact.is_primary === "y" ? "y" : "n",
+        department: contact.department || null,
+        created_by: user.adminID || null,
+        created_date: nowSql,
+        modified_by: user.adminID || null,
+        modified_date: nowSql,
+      },
+    });
+
+    inserted += result?.affectedRows || 1;
+  }
+
+  return inserted;
+};
+
 export const getCustomerTableColumns = async () => {
   const rows = await query(`SHOW COLUMNS FROM ${DB_PREFIX}${MODULE_TABLE}`);
   return new Set(rows.map((row) => row.Field));

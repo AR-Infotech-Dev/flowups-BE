@@ -2,6 +2,7 @@ export const MODULE_TABLE = "tickets";
 
 export const TICKET_STATUS_CLOSE = "208";
 export const TICKET_STATUS_OPEN = "205";
+export const TICKET_STATUS_INPROGRESS = "206";
 
 export const TICKET_SEARCH_COLUMNS = [
   "t.ticket_no",

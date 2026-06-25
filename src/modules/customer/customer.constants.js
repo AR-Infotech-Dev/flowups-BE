@@ -10,9 +10,12 @@ export const CUSTOMER_SEARCH_COLUMNS = [
 
 export const CUSTOMER_IMPORT_COLUMNS = [
   { label: "Customer Name", key: "name", required: true, sample: "ABC Traders" },
-  { label: "Contact Person", key: "contact_person", sample: "Rakesh Dhumal" },
-  { label: "Mobile No", key: "mobile_no", required: true, sample: "9876543210" },
-  { label: "Email", key: "email", sample: "customer@example.com" },
+  { label: "Contact Names", key: "contact_names", required: true, sample: "Rakesh Dhumal|Priya Shah" },
+  { label: "Contact Mobiles", key: "contact_mobiles", required: true, sample: "9876543210|9876543211" },
+  { label: "Contact Emails", key: "contact_emails", sample: "rakesh@example.com|priya@example.com" },
+  { label: "Contact Designations", key: "contact_designations", sample: "Owner|Accountant" },
+  { label: "Contact Departments", key: "contact_departments", sample: "Management|Accounts" },
+  { label: "Primary Contact Mobile", key: "primary_contact_mobile", sample: "9876543210" },
   { label: "WhatsApp No", key: "wa_no", sample: "9876543210" },
   { label: "PAN Number", key: "pan_number", sample: "ABCDE1234F" },
   { label: "GST Number", key: "gst_number", sample: "27ABCDE1234F1Z5" },
@@ -29,4 +32,5 @@ export const CUSTOMER_IMPORT_COLUMNS = [
   { label: "Product Names", key: "product_names", sample: "CRM Basic,CRM Premium" },
   { label: "Serial Numbers", key: "serial_numbers", sample: "SR-001,SR-002" },
   { label: "Product Expiry Dates", key: "product_expiry_dates", sample: "2027-04-01,2028-04-01" },
+  { label: "Product Add-ons", key: "product_add_ons", sample: "AgriModule+Payroll|AMC" },
 ];

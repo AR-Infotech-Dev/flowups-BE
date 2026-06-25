@@ -29,7 +29,7 @@ const getWorkReportOrderColumn = (value = "work_start_at") => {
   const map = {
     work_start_at: "wl.work_start_at",
     created_date: "wl.created_date",
-    spent_minutes: "wl.spent_minutes",
+    spent_minutes: "spent_minutes",
     employee_name: "a.name",
     ticket_no: "t.ticket_no",
     client_name: "c.name",
@@ -38,6 +38,17 @@ const getWorkReportOrderColumn = (value = "work_start_at") => {
 
   return map[value] || "wl.work_start_at";
 };
+
+const WORK_LOG_SPENT_MINUTES_SQL = `
+  ROUND(
+    CASE
+      WHEN wl.work_start_at IS NOT NULL AND wl.work_end_at IS NOT NULL
+        THEN TIMESTAMPDIFF(SECOND, wl.work_start_at, wl.work_end_at) / 60
+      ELSE COALESCE(wl.spent_minutes, 0)
+    END,
+    2
+  )
+`;
 
 const buildWorkReportWhere = ({ body = {}, user = {}, includeSearch = false } = {}) => {
   const {
@@ -300,31 +311,53 @@ export const getSummary = async ({ body, user }) => {
   const { whereSql, values } = buildTicketWhere({ body, user });
   const delegatedWhere = ["h.field_name = 'assignee'"];
   const delegatedValues = [];
+  const generatedWhere = ["t.status = 'active'"];
+  const generatedValues = [];
 
   if (body.user_id) {
     delegatedWhere.push("h.changed_by = ?");
     delegatedValues.push(body.user_id);
+
+    generatedWhere.push("t.created_by = ?");
+    generatedValues.push(body.user_id);
   }
 
   if (body.from_date) {
     delegatedWhere.push("DATE(h.created_date) >= ?");
     delegatedValues.push(body.from_date);
+
+    generatedWhere.push("DATE(t.created_date) >= ?");
+    generatedValues.push(body.from_date);
   }
 
   if (body.to_date) {
     delegatedWhere.push("DATE(h.created_date) <= ?");
     delegatedValues.push(body.to_date);
+
+    generatedWhere.push("DATE(t.created_date) <= ?");
+    generatedValues.push(body.to_date);
   }
 
   if (body.company_id) {
     delegatedWhere.push("t.company_id = ?");
     delegatedValues.push(body.company_id);
+
+    generatedWhere.push("t.company_id = ?");
+    generatedValues.push(body.company_id);
   } else if (!isSuperAdmin(user) && user.company_id) {
     delegatedWhere.push("t.company_id = ?");
     delegatedValues.push(user.company_id);
+
+    generatedWhere.push("t.company_id = ?");
+    generatedValues.push(user.company_id);
   }
 
-  const [rows, delegatedRows] = await Promise.all([
+  if (body.ticket_status) {
+    generatedWhere.push("t.ticket_status = ?");
+    generatedValues.push(body.ticket_status);
+  }
+
+  const [rows, delegatedRows, generatedRows] = await Promise.all([
     query(
       `
       SELECT
@@ -346,13 +379,12 @@ export const getSummary = async ({ body, user }) => {
       [CLOSED_STATUS, CLOSED_STATUS, CLOSED_STATUS, CLOSED_STATUS, CLOSED_STATUS, ...values]
     ),
     query(
-      `
-        SELECT COUNT(DISTINCT h.ticket_id) AS delegated
-        FROM ${DB_PREFIX}ticket_history h
-        INNER JOIN ${DB_PREFIX}tickets t ON h.ticket_id = t.ticket_id
-        WHERE ${delegatedWhere.join(" AND ")}
-      `,
+      ` SELECT COUNT(DISTINCT h.ticket_id) AS delegated FROM ${DB_PREFIX}ticket_history h INNER JOIN ${DB_PREFIX}tickets t ON h.ticket_id = t.ticket_id WHERE ${delegatedWhere.join(" AND ")} `,
       delegatedValues
+    ),
+    query(
+      ` SELECT COUNT(*) AS generated_tickets FROM ${DB_PREFIX}tickets t WHERE ${generatedWhere.join(" AND ")} `,
+      generatedValues
     ),
   ]);
   const summary = rows[0] || {};
@@ -360,11 +392,13 @@ export const getSummary = async ({ body, user }) => {
   const closed = Number(summary.closed || 0);
   const overdue = Number(summary.overdue || 0);
   const delegated = Number(delegatedRows[0]?.delegated || 0);
+  const generated = Number(generatedRows[0]?.generated_tickets || 0);
   const closeRate = assigned ? (closed / assigned) * 100 : 0;
   const penalty = overdue * 4;
 
   return {
     assigned,
+    generated,
     closed,
     pending: Number(summary.pending || 0),
     delegated,
@@ -466,11 +500,17 @@ const getTickets = async ({ body, user }) => {
       SELECT
         t.ticket_id,
         t.ticket_no,
+        t.description,
         t.created_date,
         t.created_date AS assigned_date,
+        t.start_date,
         t.due_date,
         t.contact_person,
         t.contact_no,
+        t.product_name,
+        t.product_serial_number,
+        t.product_add_ons,
+        t.expected_minutes,
         c.name AS customer_name,
         priority.categoryName AS ticket_priority,
         status.categoryName AS ticket_status,
@@ -647,7 +687,7 @@ export const workReport = async (req, res) => {
         wl.employee_id,
         wl.company_id,
         wl.work_start_at,
-        wl.spent_minutes,
+        ${WORK_LOG_SPENT_MINUTES_SQL} AS spent_minutes,
         wl.work_details,
         wl.work_status,
         wl.created_date,
@@ -680,7 +720,7 @@ export const workReport = async (req, res) => {
       `
       SELECT
         COUNT(*) AS total_logs,
-        COALESCE(SUM(wl.spent_minutes), 0) AS total_minutes,
+        COALESCE(SUM(${WORK_LOG_SPENT_MINUTES_SQL}), 0) AS total_minutes,
         COUNT(DISTINCT wl.employee_id) AS employee_count,
         COUNT(DISTINCT wl.ticket_id) AS ticket_count
       ${baseFrom}
@@ -695,7 +735,7 @@ export const workReport = async (req, res) => {
         wl.company_id,
         COALESCE(cm.company_name, '-') AS company_name,
         COUNT(*) AS total_logs,
-        COALESCE(SUM(wl.spent_minutes), 0) AS total_minutes
+        COALESCE(SUM(${WORK_LOG_SPENT_MINUTES_SQL}), 0) AS total_minutes
       ${baseFrom}
       ${whereSql}
       GROUP BY wl.company_id, cm.company_name

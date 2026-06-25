@@ -14,6 +14,7 @@ import {
   createTicket,
   deleteTickets,
   getAdminName,
+  getCategoryName,
   getTicketAssigneeStatusSnapshot,
   getTicketById,
   getTicketRecord,
@@ -37,7 +38,7 @@ import { ticketValidationRules } from "./ticket.validation.js";
 export const list = async (req, res) => {
   try {
     const { viewAll, client_id = null, page = 1, searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
-    const limit = 10;
+    const limit = env.perPage || 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
     const userId = Number(req.user.adminID || 0);
@@ -150,6 +151,7 @@ export const updateStatus = async (req, res) => {
   try {
     const { id: ticket_id = null } = req.params;
     if (!ticket_id) return failureResponse(res, { code: 2004, httpStatus: 404 });
+    const [oldDetails = {}] = await getTicketAssigneeStatusSnapshot(ticket_id);
 
     const data = await buildTablePayload(MODULE_TABLE, {
       ticket_status: Number(req.body.ticket_status),
@@ -158,10 +160,7 @@ export const updateStatus = async (req, res) => {
     });
 
     await updateTicket(ticket_id, data);
-
-    if (data?.ticket_status && data.ticket_status === Number(TICKET_STATUS_CLOSE)) {
-      await closeTicketWithFeedback(ticket_id, data.modified_by);
-    }
+    await notifyTicketUpdates(ticket_id, data, oldDetails);
 
     return successResponse(res, { code: 1002, httpStatus: 200, data: [] });
   } catch (error) {
@@ -231,6 +230,7 @@ const updateTicketDetails = async (req, res, ticket_id = null) => {
   }
 
   await updateTicket(ticket_id, data);
+
   await notifyTicketUpdates(ticket_id, data, oldDetails);
 
   return successResponse(res, { code: 1002, httpStatus: 200, data: [] });
@@ -245,9 +245,11 @@ const readTicketDetails = async (res, ticket_id = null) => {
   return successResponse(res, { code: 1004, httpStatus: 200, data: { data: details[0] } });
 };
 
-const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {}) => {
+export const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {}) => {
   const modifiedBy = await getAdminName(data.modified_by);
   const assignee = data.assignee ? await getAdminName(data.assignee) : null;
+  const ticket_status_cat = data.ticket_status ? await getCategoryName(data.ticket_status) : null;
+  const old_ticket_status_cat = oldDetails.ticket_status ? await getCategoryName(oldDetails.ticket_status) : null;
 
   if (data?.assignee && Number(oldDetails.old_assignee) !== Number(data.assignee)) {
     emitNotification(data.assignee, {
@@ -264,9 +266,20 @@ const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {}) => {
 
     await sendEmailToClient(ticket_id, "Assignee is Updated", "We would like to inform you that the service engineer for your support ticket has been updated.");
   }
+  if (data?.ticket_status && oldDetails.old_ticket_status !== data.ticket_status) {
+    if (parseInt(data.ticket_status) === parseInt(TICKET_STATUS_CLOSE)) {
+      await closeTicketWithFeedback(ticket_id, data.modified_by, data.ticket_no);
+    } else {
+      const cb = data.created_by || oldDetails.created_by;
+      const tn = data.ticket_no || oldDetails.ticket_no;
 
-  if (data?.ticket_status && oldDetails.old_ticket_status !== data.ticket_status && data.ticket_status === TICKET_STATUS_CLOSE) {
-    await closeTicketWithFeedback(ticket_id, data.modified_by, data.ticket_no);
+      emitNotification(data.created_by || oldDetails.created_by, {
+        title: "Ticket Status Changed",
+        body: `Ticket #${tn}'s status has been changed by ${modifiedBy?.name || "-"} to ${ticket_status_cat?.name || "-"}.`,
+      });
+
+      await sendEmailToClient(ticket_id, "Ticket Status is Changed", "We would like to inform you that the status of your for your support ticket has been updated.");
+    }
   }
 
   if (data?.due_date && oldDetails.old_due_date !== data.due_date) {
@@ -278,7 +291,7 @@ const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {}) => {
     await sendEmailToClient(ticket_id, "Due Date for your service ticket is changed! ", "We would like to inform you that due date has been changed for your support ticket.");
   }
 };
-
+// Notification On Ticket Close
 const closeTicketWithFeedback = async (ticket_id, modifiedById, ticketNo = "") => {
   const feedbackToken = createFeedbackToken();
   const modifiedBy = await getAdminName(modifiedById);
