@@ -168,10 +168,16 @@ const buildBaseWhere = ({ user = {}, searchText = "", filters = [] } = {}) => {
         }
         break;
       case "date_range": {
-        const dates = String(value || "").split("/");
-        if (dates.length === 2) {
+        const fromDate = typeof value === "object"
+          ? value?.from_date || value?.fromDate || ""
+          : String(value || "").split("/")[0] || "";
+        const toDate = typeof value === "object"
+          ? value?.to_date || value?.toDate || ""
+          : String(value || "").split("/")[1] || "";
+
+        if (fromDate && toDate) {
           where.push(`DATE(${column}) BETWEEN ? AND ?`);
-          values.push(dates[0], dates[1]);
+          values.push(fromDate, toDate);
         }
         break;
       }
