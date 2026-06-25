@@ -5,6 +5,7 @@ import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { buildTablePayload } from "#shared/utils/tablePayload.js";
 import { createFeedbackToken } from "#modules/feedback/feedback.controller.js";
+import { createCustomerContactIfMissing } from "#modules/customer/customer.model.js";
 import { hasActiveWorkLog } from "./ticket-work-logs.controller.js";
 import { MODULE_TABLE, TICKET_SEARCH_COLUMNS, TICKET_STATUS_CLOSE } from "./ticket.constants.js";
 import { customColumns, defaultColumns } from "./ticket.filter.js";
@@ -174,6 +175,29 @@ const createTicketDetails = async (req, res) => {
     return failureResponse(res, { code: 2001, httpStatus: 400, message: validation.message });
   }
 
+  const shouldSaveContact = req.body.save_contact === true || String(req.body.save_contact || "").toLowerCase() === "true";
+  const newContact = shouldSaveContact
+    ? {
+      ...(req.body.contact_details || {}),
+      name: req.body.contact_details?.name || req.body.contact_person || "",
+      mobile_no: req.body.contact_details?.mobile_no || req.body.contact_no || "",
+    }
+    : null;
+
+  if (shouldSaveContact) {
+    const mobileNo = String(newContact.mobile_no || "").replace(/\D/g, "");
+    if (!String(newContact.name || "").trim()) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "Contact name is required to add new contact" });
+    }
+    if (!/^[0-9]\d{9}$/.test(mobileNo)) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "Enter valid 10-digit contact number" });
+    }
+    if (newContact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(newContact.email).trim())) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "Invalid contact email address" });
+    }
+    newContact.mobile_no = mobileNo;
+  }
+
   const companyId = req.user.company_id || req.body.company_id || null;
   const ticketNo = await generateTicketNumber({ companyId });
   const active_amc = await resolveTicketActiveAmc(req.body.client_id);
@@ -187,6 +211,14 @@ const createTicketDetails = async (req, res) => {
   });
 
   const result = await createTicket(data);
+
+  if (shouldSaveContact) {
+    await createCustomerContactIfMissing({
+      customerId: data.client_id,
+      contact: newContact,
+      user: req.user,
+    });
+  }
 
   if (data.assignee && Number(data.assignee) !== Number(data.created_by)) {
     emitNotification(data.assignee, {

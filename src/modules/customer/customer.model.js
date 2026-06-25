@@ -12,6 +12,57 @@ export const deleteCustomers = (ids = []) => CommonModel.deleteMasterDetails({ta
 
 export const getCustomerContacts = (customerId) => CommonModel.getMasterDetails("customer_contacts", "name, mobile_no ,email, department, designation, is_primary", { customer_id: customerId });
 
+export const findCustomerContactByMobile = async ({ customerId, mobileNo } = {}) => {
+  if (!customerId || !mobileNo) return null;
+
+  const rows = await query(
+    `
+      SELECT contact_id, name, mobile_no, email, department, designation, is_primary
+      FROM ${DB_PREFIX}customer_contacts
+      WHERE customer_id = ?
+        AND REPLACE(REPLACE(REPLACE(REPLACE(mobile_no, ' ', ''), '-', ''), '+91', ''), '+', '') = ?
+      LIMIT 1
+    `,
+    [customerId, String(mobileNo || "").replace(/\D/g, "")],
+  );
+
+  return rows[0] || null;
+};
+
+export const createCustomerContactIfMissing = async ({ customerId, contact = {}, user = {} } = {}) => {
+  const mobileNo = String(contact.mobile_no || contact.contact_no || "").replace(/\D/g, "");
+  const name = String(contact.name || contact.contact_person || "").trim();
+
+  if (!customerId || !mobileNo || !name) {
+    return { inserted: false, reason: "missing_required_fields" };
+  }
+
+  const existing = await findCustomerContactByMobile({ customerId, mobileNo });
+  if (existing) {
+    return { inserted: false, existing };
+  }
+
+  const nowSql = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const result = await CommonModel.saveMasterDetails({
+    table: "customer_contacts",
+    data: {
+      customer_id: customerId,
+      name,
+      designation: contact.designation || null,
+      mobile_no: mobileNo,
+      email: contact.email || null,
+      is_primary: contact.is_primary === "y" ? "y" : "n",
+      department: contact.department || null,
+      created_by: user.adminID || null,
+      created_date: nowSql,
+      modified_by: user.adminID || null,
+      modified_date: nowSql,
+    },
+  });
+
+  return { inserted: true, insertId: result.insertId };
+};
+
 const parseStoredCustomerProducts = (value) => {
   if (Array.isArray(value)) return value;
   if (!value) return [];
