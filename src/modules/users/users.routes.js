@@ -7,6 +7,8 @@ const usersRoutes = express.Router();
 usersRoutes.post('/', requirePermission(['admin', 'users'], 'view'), userController.list);
 usersRoutes.post('/delete', requirePermission(['admin', 'users'], 'delete'), userController.changeStatus);
 usersRoutes.post('/update-location', userController.updateLocation);
+usersRoutes.post('/sign-in', userController.saveSignInLocation);
+usersRoutes.post('/sign-out', userController.saveSignOutLocation);
 usersRoutes.post('/status', userController.updateStatus);
 usersRoutes.get('/profile', userController.getProfile);
 usersRoutes.post('/profile', userController.updateProfile);

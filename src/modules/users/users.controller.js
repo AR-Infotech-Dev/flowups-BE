@@ -13,12 +13,101 @@ import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
 
 const MODULE_TABLE = "admin";
+const USER_LOCATION_LOGS_TABLE = "user_location_logs";
+
+const locationLogSchema = Joi.object({
+  latitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+  longitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+  location: Joi.string().allow("", null),
+  alive_data: Joi.any().allow(null),
+});
 
 const sanitizeSqlPayload = (payload = {}) =>
   Object.entries(payload).reduce((data, [key, value]) => {
     data[key] = value === undefined ? null : value;
     return data;
   }, {});
+
+const normalizeJsonValue = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return JSON.stringify(value);
+};
+
+const getLocationPayload = (body = {}) => ({
+  latitude: body.latitude ?? body.lat,
+  longitude: body.longitude ?? body.lng,
+  location: body.location ?? body.google_location ?? body.address ?? null,
+  alive_data: body.alive_data ?? null,
+});
+
+const saveUserLocationLog = async ({ req, eventType }) => {
+  const adminID = req.user?.adminID;
+
+  if (!adminID) {
+    return {
+      error: {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      },
+    };
+  }
+
+  const payload = getLocationPayload(req.body);
+  const result = validate(locationLogSchema, payload);
+
+  if (!result.isValid) {
+    return {
+      error: {
+        code: 2001,
+        httpStatus: 400,
+        message: result.message.replace(/"/g, ""),
+      },
+    };
+  }
+
+  const data = result.value;
+  const now = toMysqlDateTime();
+  const aliveData = normalizeJsonValue(data.alive_data);
+  const companyId = req.user?.company_id ?? null;
+
+  await CommonModel.saveMasterDetails({
+    table: USER_LOCATION_LOGS_TABLE,
+    data: sanitizeSqlPayload({
+      adminID,
+      company_id: companyId,
+      event_type: eventType,
+      latitude: String(data.latitude),
+      longitude: String(data.longitude),
+      location: data.location || null,
+      alive_data: aliveData,
+      status: "active",
+      created_by: adminID,
+      created_date: now,
+    }),
+  });
+
+  await CommonModel.updateMasterDetails({
+    table: MODULE_TABLE,
+    data: sanitizeSqlPayload({
+      latitude: String(data.latitude),
+      longitude: String(data.longitude),
+      alive_data: aliveData,
+      modified_by: adminID,
+      modified_date: now,
+    }),
+    where: { adminID },
+  });
+
+  return { data };
+};
 
 // ======================================================
 // VALIDATION SCHEMA
@@ -540,6 +629,53 @@ export const updateLocation = async (req, res) => {
     });
   }
 }
+
+export const saveSignInLocation = async (req, res) => {
+  try {
+    const result = await saveUserLocationLog({ req, eventType: "signin" });
+
+    if (result.error) {
+      return failureResponse(res, result.error);
+    }
+
+    return successResponse(res, {
+      code: 1001,
+      httpStatus: 201,
+      message: "Sign-in successfully",
+      data: [],
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}
+
+export const saveSignOutLocation = async (req, res) => {
+  try {
+    const result = await saveUserLocationLog({ req, eventType: "signout" });
+
+    if (result.error) {
+      return failureResponse(res, result.error);
+    }
+
+    return successResponse(res, {
+      code: 1001,
+      httpStatus: 201,
+      message: "Sign-out successfully",
+      data: [],
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}
+
 export const updateStatus = async (req, res) => {
   try {
     const adminID = req.user?.adminID;
@@ -602,10 +738,10 @@ export const getMarkers = async (req, res) => {
     const company_id = req.user.company_id;
     const selectedEmployeeId = employee_id || user_id || adminID;
     const shouldShowVisits = showVisits === true || showVisits === "true" || showVisits === "y" || showVisits === 1 || showVisits === "1";
-    const where = ["a.status = 'active'", "a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''",];
+    const where = ["a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''",];
     const values = [];
     const visitWhere = [
-      "v.status = 'active'",
+      // "v.status = 'active'",
     ];
     const visitValues = [];
 

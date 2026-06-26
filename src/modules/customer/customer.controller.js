@@ -3,7 +3,7 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { validateBody } from "#shared/utils/bodyValidator.js";
-import { CUSTOMER_IMPORT_COLUMNS, CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
+import { CUSTOMER_EXCEL_COLUMNS, CUSTOMER_IMPORT_COLUMNS, CUSTOMER_PRODUCT_EXCEL_COLUMNS, CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
 import { customColumns, defaultColumns } from "./customer.filter.js";
 import { customerValidationRules } from "./customer.validation.js";
 import {
@@ -31,6 +31,8 @@ import {
   rowLooksLikeTemplateKeyRow,
 } from "./customer.utils.js";
 import * as XLSX from "xlsx";
+import { renderTemplate } from "#shared/utils/templateMaker.js";
+import { buildSheetSpacerRow, excelFormat, sendExcelDownload } from "#shared/utils/excel.utils.js";
 
 const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } = {}) => {
   const normalizedName = String(name || "").trim().toLowerCase();
@@ -116,6 +118,77 @@ const validateCustomerImportContacts = (contacts = []) => {
   return { isValid: true };
 };
 
+const normalizeSkipColumns = (value = []) => {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const normalizeSelectedColumns = (value = []) => normalizeSkipColumns(value);
+
+const getExportColumns = ({ selectedColumns = [], skipColumns = [] } = {}) => {
+  const skipSet = new Set(normalizeSkipColumns(skipColumns).map((item) => item.toLowerCase()));
+  const selectedList = normalizeSelectedColumns(selectedColumns).map((item) => item.toLowerCase());
+  const allColumns = [...CUSTOMER_EXCEL_COLUMNS, ...CUSTOMER_PRODUCT_EXCEL_COLUMNS];
+  const productKeys = new Set(["customer_products", "products"]);
+
+  const filterSkipped = (columns = []) => columns.filter((column) => {
+    if (column.skip === true) return false;
+    return !skipSet.has(String(column.key || "").toLowerCase()) && !skipSet.has(String(column.header || "").toLowerCase());
+  });
+
+  if (selectedList.length) {
+    const columnsByKey = new Map(allColumns.map((column) => [String(column.key || "").toLowerCase(), column]));
+    const columnsByHeader = new Map(allColumns.map((column) => [String(column.header || "").toLowerCase(), column]));
+    const selectedExportColumns = [];
+
+    selectedList.forEach((key) => {
+      if (productKeys.has(key)) {
+        selectedExportColumns.push(...CUSTOMER_PRODUCT_EXCEL_COLUMNS);
+        return;
+      }
+
+      const column = columnsByKey.get(key) || columnsByHeader.get(key);
+      if (column) selectedExportColumns.push(column);
+    });
+
+    return filterSkipped([...new Map(selectedExportColumns.map((column) => [column.key, column])).values()]);
+  }
+
+  return filterSkipped(allColumns);
+};
+
+const joinProductValues = (products = [], field = "") => {
+  if (!products.length) return "-";
+
+  const values = products.map((product) => {
+    const value = product?.[field];
+    if (Array.isArray(value)) return value.filter(Boolean).join("+") || "-";
+    return value === null || value === undefined || value === "" ? "-" : value;
+  });
+
+  return values.join(",");
+};
+
+const buildCustomerExportRow = (customer = {}) => {
+  const products = normalizeCustomerProducts(customer.customer_products);
+
+  return {
+    ...customer,
+    product_ids: joinProductValues(products, "product_id"),
+    product_names: joinProductValues(products, "product_name"),
+    serial_numbers: joinProductValues(products, "serial_number"),
+    product_expiry_dates: joinProductValues(products, "expiry_date"),
+    product_add_ons: joinProductValues(products, "add_ons"),
+  };
+};
+
 // ======================================================
 // LIST CUSTOMERS
 // ======================================================
@@ -130,7 +203,7 @@ export const list = async (req, res) => {
       filters,
       searchText,
       other: {
-        orderBy : order_by,
+        orderBy: order_by,
         order,
         searchColumns: CUSTOMER_SEARCH_COLUMNS,
       },
@@ -181,7 +254,6 @@ export const list = async (req, res) => {
     });
   }
 };
-
 // ======================================================
 // CREATE / UPDATE / GET SINGLE
 // ======================================================
@@ -297,7 +369,7 @@ export const getCustomerDetails = async (req, res) => {
         }
 
         const details = await getCustomerById(customer_id);
-        
+
         if (!details.length) {
           return failureResponse(res, {
             code: 2004,
@@ -576,6 +648,68 @@ export const importCustomers = async (req, res) => {
         errors,
       },
     });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+
+export const downloadExcel = async (req, res) => {
+  try {
+    const payload = req.method === "GET" ? req.query : req.body;
+    const { searchText = "", order_by = "created_date", order = "DESC", filters = [], selectedColumns = [], visibleColumns = [], skipColumns = [], excludeColumns = [], } = payload || {};
+    const filterData = prepareFilterData({
+      filters,
+      searchText,
+      other: {
+        orderBy: order_by,
+        order,
+        searchColumns: CUSTOMER_SEARCH_COLUMNS,
+      },
+      default_columns: defaultColumns,
+      custom_columns: customColumns,
+    });
+
+    const { select, where, values, join, other } = filterData;
+    other.freeTextSearch = searchText;
+    other.searchColumns = CUSTOMER_SEARCH_COLUMNS;
+
+    // FILTER DATA ACCORDING TO COMPANY ID
+    if (!isSuperAdmin(req.user) && req.user.company_id) {
+      where.push("t.company_id = ?");
+      values.push(req.user.company_id);
+    }
+
+    const customerDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other, });
+    const rows = customerDetails.map(buildCustomerExportRow);
+    const headers = getExportColumns({
+      selectedColumns: normalizeSelectedColumns(selectedColumns).length ? selectedColumns : visibleColumns,
+      skipColumns: [...normalizeSkipColumns(skipColumns), ...normalizeSkipColumns(excludeColumns)],
+    });
+    const spreadsheetColumnCount = headers.length || 1;
+
+    const htmlBody = await renderTemplate(
+      "customerExport",
+      "excel",
+      {
+        spreadsheetColumnCount,
+        exportTitle: "Customers",
+        spacerRow: await buildSheetSpacerRow(18, spreadsheetColumnCount),
+        headers,
+        rows,
+      }
+    );
+    const excelAttachment = {
+      filename: "Customer-Export.xls",
+      content: await excelFormat(htmlBody),
+      contentType: "application/vnd.ms-excel",
+    };
+
+    return sendExcelDownload(res, excelAttachment);
   } catch (error) {
     return failureResponse(res, {
       code: 2008,

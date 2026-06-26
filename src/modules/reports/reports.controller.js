@@ -1,6 +1,6 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import { failureResponse, successResponse } from "#shared/utils/apiResponse.js";
-import { buildReportAttachment, buildSupportReportTemplate, parseJsonArray, isActiveAMC, } from "#shared/utils/report.utils.js";
+import { buildReportAttachment, buildSupportReportTemplate, parseJsonArray, isActiveAMC, formatDate, stripHtml, } from "#shared/utils/report.utils.js";
 import { sendEmail } from "#shared/utils/email.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { isSuperAdminRole as isSuperAdmin } from "#shared/utils/role.utils.js";
@@ -170,13 +170,17 @@ const getUserDetails = async (userId = "") => {
 
 
 const getCustomerReportWhere = ({ body = {}, user = {} } = {}) => {
-  const { customer_id = "", from_date = "" } = body;
+  const { customer_id = "", from_date = "", to_date = "" } = body;
   const where = ["t.status = 'active'", "t.client_id = ?"];
   const values = [customer_id];
 
   if (from_date) {
     where.push("DATE(COALESCE(t.start_date, t.created_date)) >= ?");
     values.push(from_date);
+  }
+  if (to_date) {
+    where.push("DATE(COALESCE(t.start_date, t.created_date)) <= ?");
+    values.push(to_date);
   }
 
   if (!isSuperAdmin(user) && user.company_id) {
@@ -553,6 +557,60 @@ const getTickets = async ({ body, user }) => {
   };
 };
 
+const getPerformanceTicketsForExport = async ({ body, user }) => {
+  const {
+    order_by = "created_date",
+    order = "DESC",
+  } = body;
+  const selectedOrder = normalizeOrder(order);
+  const orderColumn = getTicketOrderColumn(order_by);
+  const { whereSql, values } = buildTicketWhere({ body, user, includeSearch: true });
+
+  return query(
+    `
+      SELECT
+        t.ticket_id,
+        t.ticket_no,
+        t.description,
+        t.created_date,
+        t.created_date AS assigned_date,
+        t.start_date,
+        t.due_date,
+        t.contact_person,
+        t.contact_no,
+        t.product_name,
+        t.product_serial_number,
+        t.product_add_ons,
+        t.expected_minutes,
+        c.name AS customer_name,
+        priority.categoryName AS ticket_priority,
+        status.categoryName AS ticket_status,
+        queryType.categoryName AS query_type,
+        assignee.name AS assignee_name,
+        CASE
+          WHEN t.ticket_status = ? THEN COALESCE(TIMESTAMPDIFF(HOUR, t.created_date, COALESCE(cl.closed_at, t.modified_date)), 0)
+          ELSE ''
+        END AS resolution_time
+      FROM ${DB_PREFIX}tickets t
+      LEFT JOIN ${DB_PREFIX}customer c ON t.client_id = c.customer_id
+      LEFT JOIN ${DB_PREFIX}categories priority ON t.ticket_priority = priority.category_id
+      LEFT JOIN ${DB_PREFIX}categories status ON t.ticket_status = status.category_id
+      LEFT JOIN ${DB_PREFIX}categories queryType ON t.query_type = queryType.category_id
+      LEFT JOIN ${DB_PREFIX}admin assignee ON t.assignee = assignee.adminID
+      LEFT JOIN (
+        SELECT ticket_id, MIN(created_date) AS closed_at
+        FROM ${DB_PREFIX}ticket_history
+        WHERE field_name = 'ticket_status'
+          AND new_value = ?
+        GROUP BY ticket_id
+      ) cl ON cl.ticket_id = t.ticket_id
+      ${whereSql}
+      ORDER BY ${orderColumn} ${selectedOrder}
+    `,
+    [CLOSED_STATUS, CLOSED_STATUS, ...values]
+  );
+};
+
 const getActivities = async ({ body, user }) => {
   const { user_id = "", from_date = "", to_date = "", company_id = "" } = body;
   const where = ["1 = 1"];
@@ -835,6 +893,214 @@ const escapeHtml = (value = "") =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
+const formatFilterLabel = (key = "") =>
+  String(key)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const getTicketValue = (ticket = {}, keys = []) => {
+  const key = keys.find((item) => ticket[item] !== undefined && ticket[item] !== null && ticket[item] !== "");
+  return key ? ticket[key] : "";
+};
+
+const safeFileName = (value = "report") =>
+  String(value || "report")
+    .replace(/[^a-z0-9-_.]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || "report";
+
+const sendExcelDownload = (res, attachment) => {
+  const fileName = safeFileName(attachment.filename || "report.xls");
+  const content = Buffer.from(String(attachment.content || ""), "utf8");
+
+  res.attachment(fileName);
+  res.setHeader("Content-Type", `${attachment.contentType || "application/vnd.ms-excel"}; charset=utf-8`);
+  res.setHeader("Content-Length", content.length);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.end(content);
+};
+
+const performanceSummaryLabels = {
+  assigned: "Total Assigned Tickets",
+  generated: "Generated Tickets",
+  closed: "Closed Tickets",
+  pending: "Pending Tickets",
+  delegated: "Delegated Tickets",
+  overdue: "Overdue Tickets",
+  avg_resolution_time: "Average Resolution Time (hrs)",
+  productivity_score: "Productivity Score",
+};
+
+const performanceTicketColumns = [
+  ["Sr No", []],
+  ["Ticket Number", ["ticket_no", "ticketNo", "ticket_number", "ticket_id"]],
+  ["Customer Name", ["customer_name", "customerName", "client_name", "client_id", "name"]],
+  ["Priority", ["priority_name", "ticket_priority_name", "ticket_priority", "priority"]],
+  ["Ticket Status", ["status_name", "ticket_status_name", "ticket_status", "status"]],
+  ["Assigned Date", ["assigned_date", "created_date", "start_date"]],
+  ["Due Date", ["due_date", "dueDate"]],
+  ["Resolution Time", ["resolution_time", "resolutionTime", "resolve_time"]],
+];
+
+const getStatusExcelClass = (value = "") => {
+  const status = String(value || "").toLowerCase();
+  if (status.includes("closed") || status.includes("resolved") || status === CLOSED_STATUS) return "excel-status-closed";
+  if (status.includes("progress")) return "excel-status-progress";
+  return "excel-status-open";
+};
+
+const buildPerformanceExcelAttachment = ({ filters = {}, summary = {}, tickets = [], user = {} } = {}) => {
+  const userName = user.name || user.userName || user.email || filters.user_name || "Selected User";
+  const details = [
+    ["User / Company", userName],
+    ["From Date", filters.from_date ? formatDate(filters.from_date) : "All"],
+    ["To Date", filters.to_date ? formatDate(filters.to_date) : "All"],
+    ["Records", tickets.length],
+    ["Generated On", formatDate(new Date())],
+  ];
+
+  Object.entries(filters)
+    .filter(([key]) => !["user_id", "user_name", "from_date", "to_date", "page", "limit", "searchText", "order_by", "order"].includes(key))
+    .forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") details.push([formatFilterLabel(key), value]);
+    });
+
+  const summaryRows = Object.entries(summary || {}).length
+    ? Object.entries(summary).map(([key, value]) => `
+      <tr>
+        <td class="label-cell" colspan="2">${escapeHtml(performanceSummaryLabels[key] || formatFilterLabel(key))}</td>
+        <td class="value-cell" colspan="2">${escapeHtml(value)}</td>
+        <td class="empty-cell" colspan="4">&nbsp;</td>
+      </tr>
+    `).join("")
+    : `<tr><td class="empty-row" colspan="8">No summary data available.</td></tr>`;
+
+  const detailRows = details.map(([label, value]) => `
+    <tr>
+      <td class="label-cell" colspan="2">${escapeHtml(label)}</td>
+      <td class="value-cell" colspan="2">${escapeHtml(value || "-")}</td>
+      <td class="empty-cell" colspan="4">&nbsp;</td>
+    </tr>
+  `).join("");
+
+  const ticketRows = tickets.length
+    ? tickets.map((ticket, index) => `
+      <tr>
+        ${performanceTicketColumns.map(([label, keys]) => {
+      if (label === "Sr No") return `<td class="ticket-cell text-center">${index + 1}</td>`;
+      const rawValue = getTicketValue(ticket, keys) || "-";
+      const value = label.toLowerCase().includes("date") ? formatDate(rawValue) : stripHtml(rawValue);
+      const statusClass = label === "Ticket Status" ? ` ${getStatusExcelClass(rawValue)}` : "";
+      return `<td class="ticket-cell${statusClass}">${escapeHtml(value)}</td>`;
+    }).join("")}
+      </tr>
+    `).join("")
+    : `<tr><td class="empty-row" colspan="8">No tickets found for this report.</td></tr>`;
+
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+      <head>
+        <meta charset="utf-8" />
+        <style>
+          body{margin:0;background:#fff;color:#111827;font-family:Calibri,Arial,sans-serif;font-size:12px}
+          table{width:100%;border-collapse:collapse;table-layout:fixed}
+          td,th{border:1px solid #d9e2ec;padding:6px 8px;vertical-align:middle;mso-number-format:"\\@"}
+          .top-title{background:#174d80;color:#fff;font-size:22px;font-weight:700;text-align:center;height:38px}
+          .sub-title{background:#f8fbff;color:#31537a;font-weight:700;text-align:center}
+          .section-title{background:#235a84;color:#fff;font-size:15px;font-weight:700;text-align:center;height:25px}
+          .label-cell{background:#e8f1fb;color:#111827;font-weight:700;text-align:right}
+          .value-cell{background:#fff;color:#111827;font-weight:700;text-align:center}
+          .empty-cell{background:#fff;color:#fff}
+          .ticket-header-cell{background:#143a63;color:#fff;font-weight:700;text-align:center}
+          .ticket-cell{background:#fff;color:#111827;text-align:center}
+          .excel-status-closed{background:#c8f7d4;color:#064e3b;font-weight:700}
+          .excel-status-open{background:#fff0c2;color:#92400e;font-weight:700}
+          .excel-status-progress{background:#dbeafe;color:#1d4ed8;font-weight:700}
+          .empty-row{color:#64748b;text-align:center;padding:12px}
+          .text-center{text-align:center}
+        </style>
+      </head>
+      <body>
+        <table>
+          <tbody>
+            <tr><td class="top-title" colspan="8">Performance Support Report</td></tr>
+            <tr><td class="sub-title" colspan="8">${escapeHtml(userName)}</td></tr>
+            <tr><td class="empty-cell" colspan="8">&nbsp;</td></tr>
+            <tr><td class="section-title" colspan="8">Summary</td></tr>
+            ${summaryRows}
+            <tr><td class="empty-cell" colspan="8">&nbsp;</td></tr>
+            <tr><td class="section-title" colspan="8">Report Details</td></tr>
+            ${detailRows}
+            <tr><td class="empty-cell" colspan="8">&nbsp;</td></tr>
+            <tr><td class="section-title" colspan="8">Tickets</td></tr>
+            <tr>${performanceTicketColumns.map(([label]) => `<th class="ticket-header-cell">${escapeHtml(label)}</th>`).join("")}</tr>
+            ${ticketRows}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+
+  return {
+    filename: `${safeFileName(userName)}-performance-report.xls`,
+    content: html,
+    contentType: "application/vnd.ms-excel",
+  };
+};
+
+export const exportCustomerReportExcel = async (req, res) => {
+  try {
+    const customerId = req.body.customer_id || req.body.customerId;
+    if (!customerId) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "customer_id is required" });
+    }
+
+    const normalizedBody = {
+      ...req.body,
+      customer_id: customerId,
+    };
+    const [customer, summary, tickets] = await Promise.all([
+      getCustomerReportCustomer({ customerId, user: req.user }),
+      getCustomerReportSummary({ body: normalizedBody, user: req.user }),
+      getCustomerReportTickets({ body: normalizedBody, user: req.user }),
+    ]);
+
+    if (!customer?.customer_id) {
+      return failureResponse(res, { code: 2004, httpStatus: 404, message: "Customer not found" });
+    }
+
+    const attachment = await buildReportAttachment({ customer, summary, supportRows: tickets });
+    return sendExcelDownload(res, attachment);
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+
+export const exportUserPerformanceExcel = async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.user_id) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "user_id is required" });
+    }
+
+    const [userDetails, summary, tickets] = await Promise.all([
+      getUserDetails(body.user_id),
+      getSummary({ body, user: req.user }),
+      getPerformanceTicketsForExport({ body, user: req.user }),
+    ]);
+
+    const attachment = buildPerformanceExcelAttachment({
+      filters: body,
+      summary,
+      tickets,
+      user: userDetails,
+    });
+    return sendExcelDownload(res, attachment);
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
 
 export const sendReport = async (req, res) => {
   try {

@@ -99,7 +99,7 @@ export const buildSupportReportTemplate = async ({ customer = {}, supportCallCou
   );
 };
 export const buildReportAttachment = async ({ customer = {}, summary = {}, supportRows = [], }) => {
-  const spreadsheetColumnCount = 10;
+  const spreadsheetColumnCount = 9;
   const activeAMC = isActiveAMC(customer);
   const htmlBody = await renderTemplate(
     "customerReport",
@@ -124,7 +124,7 @@ export const buildReportAttachment = async ({ customer = {}, summary = {}, suppo
             generated_on: formatDate(new Date()),
           }
           : null,
-        gapCols: 1,
+        gapCols: 3,
         labelColspan: 1,
         valueColspan: 2,
       }),
@@ -138,7 +138,8 @@ export const buildReportAttachment = async ({ customer = {}, summary = {}, suppo
           query_type: row.query_type || "-",
           ticket_status: row.ticket_status || "-",
           ticket_priority: row.ticket_priority || "-",
-          assignee: row.assignee || "-",
+          assignee: row.assignee_name || "-",
+          resolver: row.resolver_name || "-",
           statusClass: isResolvedStatus(row)
             ? "excel-status-closed"
             : "excel-status-open",

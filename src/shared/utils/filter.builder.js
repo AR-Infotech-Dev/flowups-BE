@@ -69,9 +69,6 @@ export const prepareFilterData = ({ filters = [], searchText = "", other = { ord
     // ===============================
     filters.forEach(({ field, condition, value, type }) => {
         const allColumns = { ...default_columns, ...custom_columns };
-
-        // const { field, condition, value } = item;
-        // const column = `t.${field}`;
         const isJoinedOptionFilter =
             allColumns[field] &&
             ["select", "enum"].includes(String(type || "").toLowerCase()) &&
