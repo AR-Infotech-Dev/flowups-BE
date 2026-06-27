@@ -3,6 +3,7 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { validateBody } from "#shared/utils/bodyValidator.js";
+import { env } from "#config/env.js";
 
 const MODULE_TABLE = "menu_master";
 
@@ -52,7 +53,9 @@ export const list = async (req, res) => {
       filters = [],
     } = req.body;
 
-    const limit = 10;
+    // const limit = 10;
+    const limit = env.perPage;
+    
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 
@@ -138,7 +141,9 @@ export const menulist = async (req, res) => {
       filters = [],
     } = req.body;
 
-    const limit = 10;
+    // const limit = 10;
+    const limit = env.perPage;
+
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 

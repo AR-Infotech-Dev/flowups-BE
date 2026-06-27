@@ -33,6 +33,7 @@ import {
 import * as XLSX from "xlsx";
 import { renderTemplate } from "#shared/utils/templateMaker.js";
 import { buildSheetSpacerRow, excelFormat, sendExcelDownload } from "#shared/utils/excel.utils.js";
+import { env } from "#config/env.js";
 
 const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } = {}) => {
   const normalizedName = String(name || "").trim().toLowerCase();
@@ -195,7 +196,8 @@ const buildCustomerExportRow = (customer = {}) => {
 export const list = async (req, res) => {
   try {
     const { page = 1, searchText = "", getAll = "N", order_by = "created_date", order = "DESC", filters = [], } = req.body;
-    const limit = 10;
+    // const limit = env. 10;
+    const limit = env.perPage;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 

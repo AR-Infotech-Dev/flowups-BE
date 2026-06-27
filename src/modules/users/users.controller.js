@@ -219,7 +219,9 @@ export const list = async (req, res) => {
       filters,
     } = req.body;
 
-    const limit = 10;
+    // const limit = 10;
+    const limit = env.perPage;
+
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 

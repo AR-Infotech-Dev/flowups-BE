@@ -15,8 +15,7 @@ import {
   buildSideBySideRows,
   excelFormat
 } from "#shared/utils/excel.utils.js";
-
-const LIMIT = 10;
+const LIMIT = env.perPage;
 const createVisitToken = () => {
   return crypto.randomBytes(32).toString("hex");
 };
