@@ -3,20 +3,21 @@ import { DB_PREFIX, query } from "#config/database.js";
 import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { buildTablePayload } from "#shared/utils/tablePayload.js";
+import { TICKET_STATUS_INPROGRESS, TICKET_STATUS_OPEN } from "./ticket.constants.js";
+import { notifyTicketUpdates } from "./ticket.controller.js";
 
 const MODULE_TABLE = "ticket_work_logs";
 
-
 const toMinutes = (value = 0) => {
     const minutes = Number(value || 0);
-    return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 0;
+    return Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes * 100) / 100 : 0;
 };
 
 const getTicket = async (ticketId = null) => {
     if (!ticketId) return null;
     return await CommonModel.getSpecificDetails(
         "tickets",
-        "ticket_id, assignee, company_id, expected_minutes",
+        "ticket_id, ticket_no, assignee, company_id, expected_minutes, ticket_status, created_by, modified_by",
         { ticket_id: ticketId }
     );
 };
@@ -50,7 +51,8 @@ const calculateSpentMinutes = (startValue = null, endValue = null) => {
     const start = new Date(startValue);
     const end = new Date(endValue);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return 0;
-    return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
+    const minutes = (end.getTime() - start.getTime()) / 60000;
+    return Math.max(0, Math.round(minutes * 100) / 100);
 };
 
 export const list = async (req, res) => {
@@ -69,6 +71,14 @@ export const list = async (req, res) => {
             `
             SELECT
                 wl.*,
+                ROUND(
+                    CASE
+                        WHEN wl.work_start_at IS NOT NULL AND wl.work_end_at IS NOT NULL
+                            THEN TIMESTAMPDIFF(SECOND, wl.work_start_at, wl.work_end_at) / 60
+                        ELSE COALESCE(wl.spent_minutes, 0)
+                    END,
+                    2   
+                ) AS spent_minutes,
                 a.name AS employee_name,
                 DATE_FORMAT(wl.work_start_at, '%Y-%m-%d') AS work_date,
                 DATE_FORMAT(wl.work_start_at, '%h:%i %p') AS work_time
@@ -112,6 +122,8 @@ export const create = async (req, res) => {
     try {
         const ticketId = req.body.ticket_id;
         const ticket = await getTicket(ticketId);
+        console.log('ticket :', ticket)
+
         //TICKET REQUIRED
         if (!ticket) {
             return failureResponse(res, {
@@ -150,6 +162,23 @@ export const create = async (req, res) => {
 
         const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data });
 
+        if (parseInt(ticket.ticket_status) == parseInt(TICKET_STATUS_OPEN)) {
+            const ticketUpdateData = {
+                ticket_status: TICKET_STATUS_INPROGRESS,
+                modified_by: req.user.adminID
+            };
+            await CommonModel.updateMasterDetails({
+                table: 'tickets',
+                data: ticketUpdateData,
+                where: { ticket_id: ticketId },
+            });
+            console.log('ticketId:', ticketId);
+            console.log('ticketUpdateData:', ticketUpdateData);
+            console.log('ticket:', ticket);
+
+            await notifyTicketUpdates(ticketId, ticketUpdateData, ticket);
+
+        }
         return successResponse(res, {
             code: 1001,
             httpStatus: 201,
@@ -158,6 +187,8 @@ export const create = async (req, res) => {
             },
         });
     } catch (error) {
+        console.log(error);
+
         return failureResponse(res, {
             code: 2008,
             httpStatus: 500,
@@ -220,13 +251,13 @@ export const update = async (req, res) => {
             });
         }
         const spentMinutes = calculateSpentMinutes(workLog.work_start_at, currentDateTime);
-        if (!spentMinutes) {
-            return failureResponse(res, {
-                code: 2000,
-                httpStatus: 400,
-                message: "Work should be taken more than 1 minute",
-            });
-        }
+        // if (!spentMinutes) {
+        //     return failureResponse(res, {
+        //         code: 2000,
+        //         httpStatus: 400,
+        //         message: "Work should be taken more than 1 minute",
+        //     });
+        // }
 
         const data = await buildTablePayload(MODULE_TABLE, {
             work_end_at: toMysqlDateTime(), //req.body.work_end_at,

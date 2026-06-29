@@ -1,6 +1,6 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import { failureResponse, successResponse } from "#shared/utils/apiResponse.js";
-import { buildReportAttachment, buildSupportReportTemplate, parseJsonArray, isActiveAMC, } from "#shared/utils/report.utils.js";
+import { buildReportAttachment, buildSupportReportTemplate, buildPerformanceExcelAttachment, parseJsonArray, isActiveAMC, formatDate, stripHtml, } from "#shared/utils/report.utils.js";
 import { sendEmail } from "#shared/utils/email.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { isSuperAdminRole as isSuperAdmin } from "#shared/utils/role.utils.js";
@@ -29,7 +29,7 @@ const getWorkReportOrderColumn = (value = "work_start_at") => {
   const map = {
     work_start_at: "wl.work_start_at",
     created_date: "wl.created_date",
-    spent_minutes: "wl.spent_minutes",
+    spent_minutes: "spent_minutes",
     employee_name: "a.name",
     ticket_no: "t.ticket_no",
     client_name: "c.name",
@@ -38,6 +38,17 @@ const getWorkReportOrderColumn = (value = "work_start_at") => {
 
   return map[value] || "wl.work_start_at";
 };
+
+const WORK_LOG_SPENT_MINUTES_SQL = `
+  ROUND(
+    CASE
+      WHEN wl.work_start_at IS NOT NULL AND wl.work_end_at IS NOT NULL
+        THEN TIMESTAMPDIFF(SECOND, wl.work_start_at, wl.work_end_at) / 60
+      ELSE COALESCE(wl.spent_minutes, 0)
+    END,
+    2
+  )
+`;
 
 const buildWorkReportWhere = ({ body = {}, user = {}, includeSearch = false } = {}) => {
   const {
@@ -159,13 +170,17 @@ const getUserDetails = async (userId = "") => {
 
 
 const getCustomerReportWhere = ({ body = {}, user = {} } = {}) => {
-  const { customer_id = "", from_date = "" } = body;
+  const { customer_id = "", from_date = "", to_date = "" } = body;
   const where = ["t.status = 'active'", "t.client_id = ?"];
   const values = [customer_id];
 
   if (from_date) {
     where.push("DATE(COALESCE(t.start_date, t.created_date)) >= ?");
     values.push(from_date);
+  }
+  if (to_date) {
+    where.push("DATE(COALESCE(t.start_date, t.created_date)) <= ?");
+    values.push(to_date);
   }
 
   if (!isSuperAdmin(user) && user.company_id) {
@@ -300,31 +315,53 @@ export const getSummary = async ({ body, user }) => {
   const { whereSql, values } = buildTicketWhere({ body, user });
   const delegatedWhere = ["h.field_name = 'assignee'"];
   const delegatedValues = [];
+  const generatedWhere = ["t.status = 'active'"];
+  const generatedValues = [];
 
   if (body.user_id) {
     delegatedWhere.push("h.changed_by = ?");
     delegatedValues.push(body.user_id);
+
+    generatedWhere.push("t.created_by = ?");
+    generatedValues.push(body.user_id);
   }
 
   if (body.from_date) {
     delegatedWhere.push("DATE(h.created_date) >= ?");
     delegatedValues.push(body.from_date);
+
+    generatedWhere.push("DATE(t.created_date) >= ?");
+    generatedValues.push(body.from_date);
   }
 
   if (body.to_date) {
     delegatedWhere.push("DATE(h.created_date) <= ?");
     delegatedValues.push(body.to_date);
+
+    generatedWhere.push("DATE(t.created_date) <= ?");
+    generatedValues.push(body.to_date);
   }
 
   if (body.company_id) {
     delegatedWhere.push("t.company_id = ?");
     delegatedValues.push(body.company_id);
+
+    generatedWhere.push("t.company_id = ?");
+    generatedValues.push(body.company_id);
   } else if (!isSuperAdmin(user) && user.company_id) {
     delegatedWhere.push("t.company_id = ?");
     delegatedValues.push(user.company_id);
+
+    generatedWhere.push("t.company_id = ?");
+    generatedValues.push(user.company_id);
   }
 
-  const [rows, delegatedRows] = await Promise.all([
+  if (body.ticket_status) {
+    generatedWhere.push("t.ticket_status = ?");
+    generatedValues.push(body.ticket_status);
+  }
+
+  const [rows, delegatedRows, generatedRows] = await Promise.all([
     query(
       `
       SELECT
@@ -346,13 +383,12 @@ export const getSummary = async ({ body, user }) => {
       [CLOSED_STATUS, CLOSED_STATUS, CLOSED_STATUS, CLOSED_STATUS, CLOSED_STATUS, ...values]
     ),
     query(
-      `
-        SELECT COUNT(DISTINCT h.ticket_id) AS delegated
-        FROM ${DB_PREFIX}ticket_history h
-        INNER JOIN ${DB_PREFIX}tickets t ON h.ticket_id = t.ticket_id
-        WHERE ${delegatedWhere.join(" AND ")}
-      `,
+      ` SELECT COUNT(DISTINCT h.ticket_id) AS delegated FROM ${DB_PREFIX}ticket_history h INNER JOIN ${DB_PREFIX}tickets t ON h.ticket_id = t.ticket_id WHERE ${delegatedWhere.join(" AND ")} `,
       delegatedValues
+    ),
+    query(
+      ` SELECT COUNT(*) AS generated_tickets FROM ${DB_PREFIX}tickets t WHERE ${generatedWhere.join(" AND ")} `,
+      generatedValues
     ),
   ]);
   const summary = rows[0] || {};
@@ -360,11 +396,13 @@ export const getSummary = async ({ body, user }) => {
   const closed = Number(summary.closed || 0);
   const overdue = Number(summary.overdue || 0);
   const delegated = Number(delegatedRows[0]?.delegated || 0);
+  const generated = Number(generatedRows[0]?.generated_tickets || 0);
   const closeRate = assigned ? (closed / assigned) * 100 : 0;
   const penalty = overdue * 4;
 
   return {
     assigned,
+    generated,
     closed,
     pending: Number(summary.pending || 0),
     delegated,
@@ -466,20 +504,26 @@ const getTickets = async ({ body, user }) => {
       SELECT
         t.ticket_id,
         t.ticket_no,
+        t.description,
         t.created_date,
         t.created_date AS assigned_date,
+        t.start_date,
         t.due_date,
         t.contact_person,
         t.contact_no,
+        t.product_name,
+        t.product_serial_number,
+        t.product_add_ons,
+        t.expected_minutes,
+        t.amc_call,
+        t.call_direction,
         c.name AS customer_name,
         priority.categoryName AS ticket_priority,
         status.categoryName AS ticket_status,
         queryType.categoryName AS query_type,
         assignee.name AS assignee_name,
-        CASE
-          WHEN t.ticket_status = ? THEN COALESCE(TIMESTAMPDIFF(HOUR, t.created_date, COALESCE(cl.closed_at, t.modified_date)), 0)
-          ELSE ''
-        END AS resolution_time
+        COALESCE(workLogs.resolution_time, 0) AS resolution_time,
+        COALESCE(workLogs.resolution_time_seconds, 0) AS resolution_time_seconds
       FROM ${DB_PREFIX}tickets t
       LEFT JOIN ${DB_PREFIX}customer c ON t.client_id = c.customer_id
       LEFT JOIN ${DB_PREFIX}categories priority ON t.ticket_priority = priority.category_id
@@ -487,17 +531,25 @@ const getTickets = async ({ body, user }) => {
       LEFT JOIN ${DB_PREFIX}categories queryType ON t.query_type = queryType.category_id
       LEFT JOIN ${DB_PREFIX}admin assignee ON t.assignee = assignee.adminID
       LEFT JOIN (
-        SELECT ticket_id, MIN(created_date) AS closed_at
-        FROM ${DB_PREFIX}ticket_history
-        WHERE field_name = 'ticket_status'
-          AND new_value = ?
+        SELECT
+          ticket_id,
+          ROUND(SUM(COALESCE(spent_minutes, 0)), 2) AS resolution_time,
+          SUM(
+            CASE
+              WHEN work_start_at IS NOT NULL AND work_end_at IS NOT NULL
+                THEN TIMESTAMPDIFF(SECOND, work_start_at, work_end_at)
+              ELSE ROUND(COALESCE(spent_minutes, 0) * 60)
+            END
+          ) AS resolution_time_seconds
+        FROM ${DB_PREFIX}ticket_work_logs
+        WHERE status = 'active'
         GROUP BY ticket_id
-      ) cl ON cl.ticket_id = t.ticket_id
+      ) workLogs ON workLogs.ticket_id = t.ticket_id
       ${whereSql}
       ORDER BY ${orderColumn} ${selectedOrder}
       LIMIT ${safeLimit} OFFSET ${start}
     `,
-    [CLOSED_STATUS, CLOSED_STATUS, ...values]
+    values
   );
 
   return {
@@ -511,6 +563,68 @@ const getTickets = async ({ body, user }) => {
       end: Math.min(start + safeLimit, total),
     },
   };
+};
+
+const getPerformanceTicketsForExport = async ({ body, user }) => {
+  const {
+    order_by = "created_date",
+    order = "DESC",
+  } = body;
+  const selectedOrder = normalizeOrder(order);
+  const orderColumn = getTicketOrderColumn(order_by);
+  const { whereSql, values } = buildTicketWhere({ body, user, includeSearch: true });
+
+  return query(
+    `
+      SELECT
+        t.ticket_id,
+        t.ticket_no,
+        t.description,
+        t.created_date,
+        t.created_date AS assigned_date,
+        t.start_date,
+        t.due_date,
+        t.contact_person,
+        t.contact_no,
+        t.product_name,
+        t.product_serial_number,
+        t.product_add_ons,
+        t.expected_minutes,
+        t.amc_call,
+        t.call_direction,
+        c.name AS customer_name,
+        priority.categoryName AS ticket_priority,
+        status.categoryName AS ticket_status,
+        queryType.categoryName AS query_type,
+        assignee.name AS assignee_name,
+        COALESCE(workLogs.resolution_time, 0) AS resolution_time,
+        COALESCE(workLogs.resolution_time_seconds, 0) AS resolution_time_seconds
+      FROM ${DB_PREFIX}tickets t
+      LEFT JOIN ${DB_PREFIX}customer c ON t.client_id = c.customer_id
+      LEFT JOIN ${DB_PREFIX}categories priority ON t.ticket_priority = priority.category_id
+      LEFT JOIN ${DB_PREFIX}categories status ON t.ticket_status = status.category_id
+      LEFT JOIN ${DB_PREFIX}categories queryType ON t.query_type = queryType.category_id
+      LEFT JOIN ${DB_PREFIX}admin assignee ON t.assignee = assignee.adminID
+      LEFT JOIN (
+        SELECT
+          ticket_id,
+          ROUND(SUM(COALESCE(spent_minutes, 0)), 2) AS resolution_time,
+          SUM(
+            CASE
+              WHEN work_start_at IS NOT NULL AND work_end_at IS NOT NULL
+                THEN TIMESTAMPDIFF(SECOND, work_start_at, work_end_at)
+              ELSE ROUND(COALESCE(spent_minutes, 0) * 60)
+            END
+          ) AS resolution_time_seconds
+        FROM ${DB_PREFIX}ticket_work_logs
+        WHERE status = 'active'
+        GROUP BY ticket_id
+      ) workLogs ON workLogs.ticket_id = t.ticket_id
+      ${whereSql}
+      ORDER BY ${orderColumn} ${selectedOrder}
+    `,
+    values
+  );
 };
 
 const getActivities = async ({ body, user }) => {
@@ -647,7 +761,7 @@ export const workReport = async (req, res) => {
         wl.employee_id,
         wl.company_id,
         wl.work_start_at,
-        wl.spent_minutes,
+        ${WORK_LOG_SPENT_MINUTES_SQL} AS spent_minutes,
         wl.work_details,
         wl.work_status,
         wl.created_date,
@@ -680,7 +794,7 @@ export const workReport = async (req, res) => {
       `
       SELECT
         COUNT(*) AS total_logs,
-        COALESCE(SUM(wl.spent_minutes), 0) AS total_minutes,
+        COALESCE(SUM(${WORK_LOG_SPENT_MINUTES_SQL}), 0) AS total_minutes,
         COUNT(DISTINCT wl.employee_id) AS employee_count,
         COUNT(DISTINCT wl.ticket_id) AS ticket_count
       ${baseFrom}
@@ -695,7 +809,7 @@ export const workReport = async (req, res) => {
         wl.company_id,
         COALESCE(cm.company_name, '-') AS company_name,
         COUNT(*) AS total_logs,
-        COALESCE(SUM(wl.spent_minutes), 0) AS total_minutes
+        COALESCE(SUM(${WORK_LOG_SPENT_MINUTES_SQL}), 0) AS total_minutes
       ${baseFrom}
       ${whereSql}
       GROUP BY wl.company_id, cm.company_name
@@ -795,6 +909,114 @@ const escapeHtml = (value = "") =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+
+const formatFilterLabel = (key = "") =>
+  String(key)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const getTicketValue = (ticket = {}, keys = []) => {
+  const key = keys.find((item) => ticket[item] !== undefined && ticket[item] !== null && ticket[item] !== "");
+  return key ? ticket[key] : "";
+};
+
+const safeFileName = (value = "report") =>
+  String(value || "report")
+    .replace(/[^a-z0-9-_.]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || "report";
+
+const sendExcelDownload = (res, attachment) => {
+  const fileName = safeFileName(attachment.filename || "report.xls");
+  const content = Buffer.from(String(attachment.content || ""), "utf8");
+
+  res.attachment(fileName);
+  res.setHeader("Content-Type", `${attachment.contentType || "application/vnd.ms-excel"}; charset=utf-8`);
+  res.setHeader("Content-Length", content.length);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.end(content);
+};
+
+const performanceSummaryLabels = {
+  assigned: "Total Assigned Tickets",
+  generated: "Generated Tickets",
+  closed: "Closed Tickets",
+  pending: "Pending Tickets",
+  delegated: "Delegated Tickets",
+  overdue: "Overdue Tickets",
+  avg_resolution_time: "Average Resolution Time (hrs)",
+  productivity_score: "Productivity Score",
+};
+
+const performanceTicketColumns = [
+  ["Sr No", []],
+  ["Ticket Number", ["ticket_no", "ticketNo", "ticket_number", "ticket_id"]],
+  ["Customer Name", ["customer_name", "customerName", "client_name", "client_id", "name"]],
+  ["Priority", ["priority_name", "ticket_priority_name", "ticket_priority", "priority"]],
+  ["Ticket Status", ["status_name", "ticket_status_name", "ticket_status", "status"]],
+  ["Assigned Date", ["assigned_date", "created_date", "start_date"]],
+  ["Due Date", ["due_date", "dueDate"]],
+  ["Resolution Time", ["resolution_time", "resolutionTime", "resolve_time"]],
+];
+
+const getStatusExcelClass = (value = "") => {
+  const status = String(value || "").toLowerCase();
+  if (status.includes("closed") || status.includes("resolved") || status === CLOSED_STATUS) return "excel-status-closed";
+  if (status.includes("progress")) return "excel-status-progress";
+  return "excel-status-open";
+};
+
+export const exportCustomerReportExcel = async (req, res) => {
+  try {
+    const customerId = req.body.customer_id || req.body.customerId;
+    if (!customerId) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "customer_id is required" });
+    }
+
+    const normalizedBody = {
+      ...req.body,
+      customer_id: customerId,
+    };
+    const [customer, summary, tickets] = await Promise.all([
+      getCustomerReportCustomer({ customerId, user: req.user }),
+      getCustomerReportSummary({ body: normalizedBody, user: req.user }),
+      getCustomerReportTickets({ body: normalizedBody, user: req.user }),
+    ]);
+
+    if (!customer?.customer_id) {
+      return failureResponse(res, { code: 2004, httpStatus: 404, message: "Customer not found" });
+    }
+
+    const attachment = await buildReportAttachment({ customer, summary, supportRows: tickets });
+    return sendExcelDownload(res, attachment);
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+
+export const exportUserPerformanceExcel = async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.user_id) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "user_id is required" });
+    }
+
+    const [userDetails, summary, tickets] = await Promise.all([
+      getUserDetails(body.user_id),
+      getSummary({ body, user: req.user }),
+      getPerformanceTicketsForExport({ body, user: req.user }),
+    ]);
+    // console.log(tickets);
+    console.log(summary);
+
+    const attachment = await buildPerformanceExcelAttachment({ filters: body, summary, tickets, user: userDetails });
+    return sendExcelDownload(res, attachment);
+  } catch (error) {
+    console.log("error : ", error);
+
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
 
 export const sendReport = async (req, res) => {
   try {

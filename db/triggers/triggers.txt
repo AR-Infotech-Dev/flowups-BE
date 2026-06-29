@@ -5,34 +5,76 @@ DROP TRIGGER IF EXISTS trg_ticket_after_insert;
 
 DELIMITER $$
 
-CREATE TRIGGER trg_ticket_after_insert
-AFTER INSERT ON ab_tickets
+CREATE DEFINER=`root`@`localhost`
+TRIGGER `trg_ticket_after_insert`
+AFTER INSERT ON `ab_tickets`
 FOR EACH ROW
-INSERT INTO ab_ticket_history
-(
-    ticket_id,
-    action_type,
-    field_name,
-    old_value,
-    new_value,
-    comment,
-    changed_by,
-    created_date
-)
-VALUES
-(
-    NEW.ticket_id,
-    'created',
-    'ticket',
-    NULL,
-    NEW.ticket_status,
-    CONCAT('Ticket created: ', NEW.Description),
-    NEW.created_by,
-    NOW()
-);
+BEGIN
+
+    DECLARE v_assignee_name VARCHAR(255) DEFAULT '';
+
+    INSERT INTO ab_ticket_history
+    (
+        ticket_id,
+        action_type,
+        field_name,
+        old_value,
+        new_value,
+        comment,
+        changed_by,
+        created_date
+    )
+    VALUES
+    (
+        NEW.ticket_id,
+        'created',
+        'ticket',
+        NULL,
+        NEW.ticket_status,
+        CONCAT('Ticket created: ', NEW.Description),
+        NEW.created_by,
+        NOW()
+    );
+
+    IF NEW.assignee IS NOT NULL
+       AND NEW.assignee <> ''
+       AND NEW.assignee <> NEW.created_by
+    THEN
+
+        SELECT IFNULL(name, '')
+        INTO v_assignee_name
+        FROM ab_admin
+        WHERE adminID = NEW.assignee
+        LIMIT 1;
+
+        INSERT INTO ab_ticket_history
+        (
+            ticket_id,
+            action_type,
+            field_name,
+            old_value,
+            new_value,
+            comment,
+            changed_by,
+            created_date
+        )
+        VALUES
+        (
+            NEW.ticket_id,
+            'assigned',
+            'assignee',
+            NULL,
+            NEW.assignee,
+            CONCAT('Ticket assigned to ', v_assignee_name),
+            NEW.created_by,
+            NOW()
+        );
+
+    END IF;
+
+END$$
 
 DELIMITER ;
-
 
 ---
 
@@ -330,6 +372,38 @@ BEGIN
                     'Your ticket #', NEW.ticket_no,
                     ' has been closed by ',
                     v_modified_by
+                ),
+                'ticket',
+                NEW.ticket_id,
+                'n',
+                NOW()
+            );
+
+        END IF;
+
+        IF UPPER(v_status_name) != 'CLOSED' THEN
+
+            INSERT INTO ab_notifications
+            (
+                user_id,
+                title,
+                message,
+                module_name,
+                reference_id,
+                is_read,
+                created_date
+            )
+            VALUES
+            (
+                NEW.created_by,
+                'Ticket Status Changed',
+                CONCAT(
+                    'Your ticket #', NEW.ticket_no,
+                    ' status has been changed by ',
+                    v_modified_by,
+                    ' to ',
+                    v_status_name,
+                    '.'
                 ),
                 'ticket',
                 NEW.ticket_id,

@@ -13,12 +13,101 @@ import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
 
 const MODULE_TABLE = "admin";
+const USER_LOCATION_LOGS_TABLE = "user_location_logs";
+
+const locationLogSchema = Joi.object({
+  latitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+  longitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+  location: Joi.string().allow("", null),
+  alive_data: Joi.any().allow(null),
+});
 
 const sanitizeSqlPayload = (payload = {}) =>
   Object.entries(payload).reduce((data, [key, value]) => {
     data[key] = value === undefined ? null : value;
     return data;
   }, {});
+
+const normalizeJsonValue = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return JSON.stringify(value);
+};
+
+const getLocationPayload = (body = {}) => ({
+  latitude: body.latitude ?? body.lat,
+  longitude: body.longitude ?? body.lng,
+  location: body.location ?? body.google_location ?? body.address ?? null,
+  alive_data: body.alive_data ?? null,
+});
+
+const saveUserLocationLog = async ({ req, eventType }) => {
+  const adminID = req.user?.adminID;
+
+  if (!adminID) {
+    return {
+      error: {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found",
+      },
+    };
+  }
+
+  const payload = getLocationPayload(req.body);
+  const result = validate(locationLogSchema, payload);
+
+  if (!result.isValid) {
+    return {
+      error: {
+        code: 2001,
+        httpStatus: 400,
+        message: result.message.replace(/"/g, ""),
+      },
+    };
+  }
+
+  const data = result.value;
+  const now = toMysqlDateTime();
+  const aliveData = normalizeJsonValue(data.alive_data);
+  const companyId = req.user?.company_id ?? null;
+
+  await CommonModel.saveMasterDetails({
+    table: USER_LOCATION_LOGS_TABLE,
+    data: sanitizeSqlPayload({
+      adminID,
+      company_id: companyId,
+      event_type: eventType,
+      latitude: String(data.latitude),
+      longitude: String(data.longitude),
+      location: data.location || null,
+      alive_data: aliveData,
+      status: "active",
+      created_by: adminID,
+      created_date: now,
+    }),
+  });
+
+  await CommonModel.updateMasterDetails({
+    table: MODULE_TABLE,
+    data: sanitizeSqlPayload({
+      latitude: String(data.latitude),
+      longitude: String(data.longitude),
+      alive_data: aliveData,
+      modified_by: adminID,
+      modified_date: now,
+    }),
+    where: { adminID },
+  });
+
+  return { data };
+};
 
 // ======================================================
 // VALIDATION SCHEMA
@@ -98,13 +187,7 @@ const default_columns = {
     key2: "company_id",
     select: "",
   },
-  // company_id: {
-  //   table: "company_master",
-  //   alias: "cm",
-  //   column: "company_name",
-  //   key2: "company_id",
-  //   select: "",
-  // },
+
 };
 
 const custom_columns = {
@@ -136,7 +219,9 @@ export const list = async (req, res) => {
       filters,
     } = req.body;
 
-    const limit = 10;
+    // const limit = 10;
+    const limit = env.perPage;
+
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 
@@ -229,97 +314,31 @@ export const list = async (req, res) => {
 };
 export const listNoAuth = async (req, res) => {
   try {
-    const {
-      page = 1,
-      searchText = "",
-      getAll = "N",
-      orderBy = "created_date",
-      order = "DESC",
-      company_id = null,
-      filters,
-    } = req.body;
-
-    const limit = 10;
-    const currentPage = Number(page) || 1;
-    const start = (currentPage - 1) * limit;
-
-    const other1 = {
-      orderBy,
-      order,
-      searchColumns: ["ad.name", "am.name", "r.roleName", 't.userName', "t.email"],
-    };
-
-    const filterData = prepareFilterData({
-      filters,
-      searchText,
-      other: other1,
-      default_columns,
-      custom_columns,
-    });
-
-    const { select, where, values, join, other } = filterData;
-    const scopedCompanyId = isSuperAdminRole(req.user?.role_slug)
-      ? null
-      : getUserCompanyId(req.user);
-
-    if (scopedCompanyId) {
-      where.push("t.company_id = ?");
-      values.push(scopedCompanyId);
+    const { searchText = "", getAll = "N", orderBy = "created_date", order = "DESC", company_id = null, } = req.body;
+    const text = String(searchText).trim();
+    const where = [];
+    const values = [];
+    const list = 'name, adminID, company_id, email, roleID ';
+    const isCompanyWise = true;
+    const wherec = 'name'
+   
+    if (text) {
+      where.push(`t.${wherec} LIKE ?`);
+      values.push(`%${text}%`);
     }
-    // HIDE SUPER ADMIN FROM LIST
-    where.push("r.slug != ?");
-    values.push('super_admin');
-
-    const total = await CommonModel.getCountsByParameter({
-      table: MODULE_TABLE,
-      where,
-      values,
-      join,
-      other,
-    });
-
-    const totalPages = Math.ceil(total / limit);
-
-    let end = start + limit;
-    if (end > total) end = total;
-
-    let data = [];
-
-    if (getAll === "Y") {
-      data = await CommonModel.GetMasterListDetails({
-        select,
-        table: MODULE_TABLE,
-        where,
-        values,
-        join,
-        other,
-      });
-    } else {
-      data = await CommonModel.GetMasterListDetails({
-        select,
-        table: MODULE_TABLE,
-        where,
-        values,
-        limit,
-        start,
-        join,
-        other,
-      });
+    if (!isSuperAdminRole(req.user?.role_slug)) {
+      where.push(`t.company_id = ${req.user.company_id} `);
     }
+    if (!isSuperAdminRole(req.user?.role_slug) && isCompanyWise === true) {
+      where.push(`t.company_id = ${req.user.company_id} `);
+    }
+    const result = await CommonModel.GetMasterListDetails({ select: list, table: MODULE_TABLE, where, values });
 
     return successResponse(res, {
       code: 1004,
       httpStatus: 200,
       data: {
-        data,
-        pagination: {
-          total,
-          page: currentPage,
-          limit,
-          totalPages,
-          start: total === 0 ? 0 : start + 1,
-          end,
-        },
+        data: result,
       },
     });
   } catch (error) {
@@ -427,6 +446,10 @@ export const getAdminDetails = async (req, res) => {
         if (data.password) {
           data.password = await hashPassword(data.password);
         } else {
+          delete data.password;
+        }
+        
+        if (data.userName) {
           delete data.password;
         }
 
@@ -608,6 +631,53 @@ export const updateLocation = async (req, res) => {
     });
   }
 }
+
+export const saveSignInLocation = async (req, res) => {
+  try {
+    const result = await saveUserLocationLog({ req, eventType: "signin" });
+
+    if (result.error) {
+      return failureResponse(res, result.error);
+    }
+
+    return successResponse(res, {
+      code: 1001,
+      httpStatus: 201,
+      message: "Sign-in successfully",
+      data: [],
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}
+
+export const saveSignOutLocation = async (req, res) => {
+  try {
+    const result = await saveUserLocationLog({ req, eventType: "signout" });
+
+    if (result.error) {
+      return failureResponse(res, result.error);
+    }
+
+    return successResponse(res, {
+      code: 1001,
+      httpStatus: 201,
+      message: "Sign-out successfully",
+      data: [],
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+}
+
 export const updateStatus = async (req, res) => {
   try {
     const adminID = req.user?.adminID;
@@ -670,10 +740,10 @@ export const getMarkers = async (req, res) => {
     const company_id = req.user.company_id;
     const selectedEmployeeId = employee_id || user_id || adminID;
     const shouldShowVisits = showVisits === true || showVisits === "true" || showVisits === "y" || showVisits === 1 || showVisits === "1";
-    const where = [ "a.status = 'active'", "a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''", ];
+    const where = ["a.latitude IS NOT NULL", "a.longitude IS NOT NULL", "a.latitude != ''", "a.longitude != ''",];
     const values = [];
     const visitWhere = [
-      "v.status = 'active'",
+      // "v.status = 'active'",
     ];
     const visitValues = [];
 
@@ -701,11 +771,11 @@ export const getMarkers = async (req, res) => {
       visitValues.push(to_date);
     }
 
-    const data = await query(` SELECT a.adminID, a.latitude, a.longitude, a.name, a.alive_data, a.status FROM ${DB_PREFIX}${MODULE_TABLE} a WHERE ${where.join(" AND ")} ORDER BY a.name ASC `, values );
+    const data = await query(` SELECT a.adminID, a.latitude, a.longitude, a.name, a.alive_data, a.status FROM ${DB_PREFIX}${MODULE_TABLE} a WHERE ${where.join(" AND ")} ORDER BY a.name ASC `, values);
     let visits = [];
 
     if (shouldShowVisits) {
-      visits = await query( ` SELECT v.visit_id, v.ticket_id, v.employee_id, v.latitude, v.longitude, v.visit_scheduled_at, v.visited_at, v.visit_details, v.visit_status, a.name AS employee_name, t.ticket_no FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}${MODULE_TABLE} a ON v.employee_id = a.adminID LEFT JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE ${visitWhere.join(" AND ")} AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.latitude != '' AND v.longitude != '' ORDER BY COALESCE(v.visited_at) DESC, v.visit_id DESC `, visitValues );
+      visits = await query(` SELECT v.visit_id, v.ticket_id, v.employee_id, v.latitude, v.longitude, v.visit_scheduled_at, v.visited_at, v.visit_details, v.visit_status, a.name AS employee_name, t.ticket_no FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}${MODULE_TABLE} a ON v.employee_id = a.adminID LEFT JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE ${visitWhere.join(" AND ")} AND v.latitude IS NOT NULL AND v.longitude IS NOT NULL AND v.latitude != '' AND v.longitude != '' ORDER BY COALESCE(v.visited_at) DESC, v.visit_id DESC `, visitValues);
     }
 
     return successResponse(res, {

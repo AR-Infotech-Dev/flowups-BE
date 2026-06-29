@@ -145,33 +145,33 @@ export const getSummary = async (user = {} , filter = {}) => {
 
   if (isAdminRole(user?.role_slug)) {
     return [
-      { key: "customers", label: "Total Customers", value: totalCustomers, delta: "All active scope", tone: "blue", redirectTo: '/customers' },
       { key: "tickets", label: "Open Tickets", value: openTickets, delta: `${highPriority} high`, tone: "amber", redirectTo: '/tickets' },
-      { key: "followups", label: "Today Follow-ups", value: todayFollowups, delta: `${overdueTickets} overdue`, tone: "green", redirectTo: '/tickets' },
-      { key: "users", label: "Active Users", value: activeUsers, delta: "Team members", tone: "violet", redirectTo: '/users' },
-      { key: "sla", label: "SLA Health", value: `${slaHealth}%`, delta: `${closedTickets} closed`, tone: overdueTickets ? "red" : "green", redirectTo: '/tickets' },
       { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
       { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
       { key: "amcExpired", label: "AMC Expired", value: amcSummary.expired, delta: "Needs renewal", tone: "red", redirectTo: "/customers?amc=expired" },
+      // { key: "customers", label: "Total Customers", value: totalCustomers, delta: "All active scope", tone: "blue", redirectTo: '/customers' },
+      // { key: "followups", label: "Today Follow-ups", value: todayFollowups, delta: `${overdueTickets} overdue`, tone: "green", redirectTo: '/tickets' },
+      // { key: "users", label: "Active Users", value: activeUsers, delta: "Team members", tone: "violet", redirectTo: '/users' },
+      // { key: "sla", label: "SLA Health", value: `${slaHealth}%`, delta: `${closedTickets} closed`, tone: overdueTickets ? "red" : "green", redirectTo: '/tickets' },
     ];
   }
   if (isSuperAdminRole(user?.role_slug)) {
     return [
-      { key: "customers", label: "Total Customers", value: totalCustomers, delta: "All active scope", tone: "blue", redirectTo: '/customers' },
       { key: "tickets", label: "Open Tickets", value: openTickets, delta: `${highPriority} high`, tone: "amber", redirectTo: '/tickets' },
-      { key: "followups", label: "Today Follow-ups", value: todayFollowups, delta: `${overdueTickets} overdue`, tone: "green", redirectTo: '/tickets' },
-      { key: "users", label: "Active Users", value: activeUsers, delta: "Team members", tone: "violet", redirectTo: '/users' },
-      { key: "sla", label: "SLA Health", value: `${slaHealth}%`, delta: `${closedTickets} closed`, tone: overdueTickets ? "red" : "green", redirectTo: '/tickets' },
       { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
       { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
       { key: "amcExpired", label: "AMC Expired", value: amcSummary.expired, delta: "Needs renewal", tone: "red", redirectTo: "/customers?amc=expired" },
+      { key: "users", label: "Active Users", value: activeUsers, delta: "Team members", tone: "violet", redirectTo: '/users' },
       { key: "companies", label: "Companies", value: companies, delta: "Active companies", tone: "cyan", redirectTo: '/companies' },
+      // { key: "customers", label: "Total Customers", value: totalCustomers, delta: "All active scope", tone: "blue", redirectTo: '/customers' },
+      // { key: "followups", label: "Today Follow-ups", value: todayFollowups, delta: `${overdueTickets} overdue`, tone: "green", redirectTo: '/tickets' },
+      // { key: "sla", label: "SLA Health", value: `${slaHealth}%`, delta: `${closedTickets} closed`, tone: overdueTickets ? "red" : "green", redirectTo: '/tickets' },
     ];
   }
 
   return [
+    // { key: "myFollowups", label: "My Follow-ups", value: todayFollowups, delta: "Today", tone: "blue", redirectTo: '/tickets' },
     { key: "myOpen", label: "My Open Tickets", value: openTickets, delta: `${highPriority} high`, tone: "amber", redirectTo: '/tickets' },
-    { key: "myFollowups", label: "My Follow-ups", value: todayFollowups, delta: "Today", tone: "blue", redirectTo: '/tickets' },
     { key: "closed", label: "Closed Tickets", value: closedTickets, delta: "In my scope", tone: "green", redirectTo: '/tickets' },
     { key: "overdue", label: "Overdue", value: overdueTickets, delta: "Needs action", tone: "red", redirectTo: '/tickets' },
     { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },

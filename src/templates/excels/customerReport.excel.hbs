@@ -23,7 +23,8 @@
     <th class="ticket-header-cell">Query Type</th>
     <th class="ticket-header-cell">Status</th>
     <th class="ticket-header-cell">Priority</th>
-    <th class="ticket-header-cell" colspan="3">Assignee</th>
+    <th class="ticket-header-cell" colspan="1">Resolver</th>
+    <th class="ticket-header-cell" colspan="1">Assignee</th>
 </tr>
 {{#if hasSupportRows}}
 {{#each supportRows}}
@@ -35,7 +36,8 @@
     <td class="ticket-cell">{{query_type}}</td>
     <td class="ticket-cell {{statusClass}}">{{ticket_status}}</td>
     <td class="ticket-cell">{{ticket_priority}}</td>
-    <td class="ticket-cell" colspan="3">{{assignee}}</td>
+    <td class="ticket-cell" colspan="1">{{resolver}}</td>
+    <td class="ticket-cell" colspan="1">{{assignee}}</td>
 </tr>
 {{/each}}
 {{else}}

@@ -1,3 +1,15 @@
+const getDateRangeValues = (value) => {
+    if (value && typeof value === "object") {
+        return {
+            fromDate: value.from_date || value.fromDate || "",
+            toDate: value.to_date || value.toDate || "",
+        };
+    }
+
+    const [fromDate = "", toDate = ""] = String(value || "").split("/");
+    return { fromDate, toDate };
+};
+
 export const prepareFilterData = ({ filters = [], searchText = "", other = { orderBy: 'created_by', order: 'ASC', searchColumns: [] }, default_columns = {}, custom_columns = {}, isDefault = "no" } = {}) => {
 
     const where = [];
@@ -55,12 +67,19 @@ export const prepareFilterData = ({ filters = [], searchText = "", other = { ord
     // ===============================
     // FILTER CONDITIONS
     // ===============================
-    filters.forEach(({ field, condition, value }) => {
+    filters.forEach(({ field, condition, value, type }) => {
         const allColumns = { ...default_columns, ...custom_columns };
+        const isJoinedOptionFilter =
+            allColumns[field] &&
+            ["select", "enum"].includes(String(type || "").toLowerCase()) &&
+            value !== "" &&
+            value !== null &&
+            value !== undefined &&
+            !Number.isNaN(Number(value));
 
-        // const { field, condition, value } = item;
-        // const column = `t.${field}`;
-        const column = allColumns[field]
+        const column = isJoinedOptionFilter
+            ? `t.${field}`
+            : allColumns[field]
             ? `${allColumns[field].alias}.${allColumns[field].column}`
             : `t.${field}`;
 
@@ -119,10 +138,17 @@ export const prepareFilterData = ({ filters = [], searchText = "", other = { ord
                 break;
 
             case "date_range":
-                const dates = String(value).split("/");
-                if (dates.length === 2) {
+                const { fromDate, toDate } = getDateRangeValues(value);
+                if (fromDate && toDate) {
                     where.push(`DATE(${column}) BETWEEN ? AND ?`);
-                    values.push(dates[0], dates[1]);
+                    values.push(fromDate, toDate);
+                }
+                break;
+
+            case "exact_date":
+                if (value) {
+                    where.push(`(${column} >= ? AND ${column} < DATE_ADD(?, INTERVAL 1 DAY))`);
+                    values.push(value, value);
                 }
                 break;
 

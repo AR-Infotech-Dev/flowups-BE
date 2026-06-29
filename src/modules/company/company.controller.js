@@ -7,6 +7,7 @@ import { clearCompanyMailerCache, testSmtpConnection } from "#shared/utils/email
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { env } from "process";
 
 const MODULE_TABLE = "company_master";
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,11 @@ const companyValidationRules = {
   email_logo: { label: "Email Logo" },
   created_by: { label: "Created By", type: "number" },
   modified_by: { label: "Modified By", type: "number" },
+  ticket_prefix: { label: "Ticket Prefix" },
+  ticket_include_year: { label: "Include Year" },
+  ticket_yearly_reset: { label: "Ticket Yearly Reset" },
+  ticket_prefix_padding: { label: "Padding", type: "number" },
+  ticket_no_reset: { label: "Reset Preference" },
   status: { label: "Status" },
 };
 
@@ -118,7 +124,8 @@ export const list = async (req, res) => {
       filters = [],
     } = req.body;
 
-    const limit = 10;
+    const limit = env.perPage;
+    // const limit = 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 
@@ -341,7 +348,7 @@ export const removeCompanyLogo = async (req, res) => {
   try {
     const companyId = req.params.id;
     const company = await CommonModel.getMasterDetails(MODULE_TABLE, "email_logo", {
-      company_id : companyId,
+      company_id: companyId,
     });
 
     if (!company?.length) {

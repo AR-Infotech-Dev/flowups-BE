@@ -12,6 +12,22 @@ export const getNextID = async (table = "", primary_key = "") => {
     return result[0].next_id;
 };
 
+const isDateLikeColumn = (key = "") => {
+    const normalizedKey = String(key).toLowerCase();
+    return (
+        normalizedKey === "date" ||
+        normalizedKey.endsWith("date") ||
+        normalizedKey.endsWith("_at") ||
+        normalizedKey.endsWith("_time")
+    );
+};
+
+const normalizeWriteData = (data = {}) =>
+    Object.entries(data).reduce((accumulator, [key, value]) => {
+        accumulator[key] = value === "" && isDateLikeColumn(key) ? null : value;
+        return accumulator;
+    }, {});
+
 // =====================================
 // GET MASTER DETAILS
 // =====================================
@@ -168,8 +184,9 @@ export const getFilteredCount = async ({ table = "", where = {}, join = [], othe
 // INSERT
 // =====================================
 export const saveMasterDetails = async ({ table = "", data = {} } = {}) => {
-    const columns = Object.keys(data);
-    const values = Object.values(data);
+    const normalizedData = normalizeWriteData(data);
+    const columns = Object.keys(normalizedData);
+    const values = Object.values(normalizedData);
 
     const placeholders = columns.map(() => "?").join(",");
 
@@ -187,12 +204,13 @@ export const saveMasterDetails = async ({ table = "", data = {} } = {}) => {
 // UPDATE
 // =====================================
 export const updateMasterDetails = async ({ table = "", data = {}, where = {} } = {}) => {
+    const normalizedData = normalizeWriteData(data);
     const setParts = [];
     const values = [];
 
-    Object.keys(data).forEach((key) => {
+    Object.keys(normalizedData).forEach((key) => {
         setParts.push(`${key} = ?`);
-        values.push(data[key]);
+        values.push(normalizedData[key]);
     });
 
     const whereParts = [];

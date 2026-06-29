@@ -41,7 +41,8 @@ export const failureMessages = {
   2005: "Unauthorized access",
   2006: "Token expired",
   2007: "Permission denied",
-  2008: "Something went wrong"
+  2008: "Something went wrong",
+  2009: "Session expired",
 };
 
 // ===============================
