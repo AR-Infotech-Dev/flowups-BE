@@ -56,3 +56,18 @@ export const buildExcelAttachment = ({ filename, html, contentType = EXCEL_CONTE
     contentType,
   })
 };
+const safeFileName = (value = "report") =>
+  String(value || "report")
+    .replace(/[^a-z0-9-_.]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 90) || "report";
+export const sendExcelDownload = (res, attachment) => {
+  const fileName = safeFileName(attachment.filename || "report.xls");
+  const content = Buffer.from(String(attachment.content || ""), "utf8");
+
+  res.attachment(fileName);
+  res.setHeader("Content-Type", `${attachment.contentType || "application/vnd.ms-excel"}; charset=utf-8`);
+  res.setHeader("Content-Length", content.length);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.end(content);
+};

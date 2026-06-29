@@ -5,8 +5,6 @@ import session from "express-session";
 import cookieParser from "cookie-parser";
 import path from "path";
 import routes from "#routes/index.js";
-// import {routes} from "./routes"
-// const routes = require('./routes');
 import { fileURLToPath } from "url";
 import { env } from "#config/env.js";
 import { legacyConfig } from "#config/legacy.js";
@@ -26,8 +24,8 @@ app.use(cors({
     return callback(new Error("Not allowed by CORS"));
   },
   credentials: true,
+  exposedHeaders: ["Content-Disposition", "Content-Type", "Content-Length"],
 }));
-// app.use(morgan("dev"));
 morgan.token("ip", (req) => {
   return req.ip;
 });

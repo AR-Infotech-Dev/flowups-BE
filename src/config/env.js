@@ -45,7 +45,7 @@ export const env = {
   dbPassword: process.env.DB_PASSWORD || "root",
   dbName: process.env.DB_NAME || "ticket_management",
   dbPrefix: process.env.DB_PREFIX || "ab_",
-  perPage: process.env.PER_PAGE || 10,
+  perPage: process.env.PER_PAGE || 20,
   legacyRoot: process.env.LEGACY_ROOT || "..",
   legacyAppDir: process.env.LEGACY_APP_DIR || "application",
   legacyUploadsDir: process.env.LEGACY_UPLOADS_DIR || "uploads",

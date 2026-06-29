@@ -1,59 +1,8 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import { isSuperAdminRole } from "#shared/utils/role.utils.js";
+import { formatDate, getDaysLeft, getExpiryStatus, getSortValue, parseJsonArray, toDateOnly } from "./product-expiry-report.utils.js";
 
 const DEFAULT_EXPIRING_DAYS = 30;
-
-const parseJsonArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-};
-
-const toDateOnly = (value) => {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(0, 0, 0, 0);
-  return date;
-};
-
-const formatDate = (date) => {
-  if (!date) return "";
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-};
-
-const getDaysLeft = (expiryDate) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-};
-
-const getExpiryStatus = (daysLeft, expiringDays) => {
-  if (daysLeft < 0) return "expired";
-  if (daysLeft <= expiringDays) return "expiring_soon";
-  return "valid";
-};
-
-const getSortValue = (row, orderBy) => {
-  const map = {
-    customer_name: row.customer_name,
-    product_name: row.product_name,
-    serial_number: row.serial_number,
-    expiry_date: row.expiry_date,
-    days_left: row.days_left,
-    expiry_status: row.expiry_status,
-    company_name: row.company_name,
-  };
-
-  return map[orderBy] ?? row.expiry_date;
-};
 
 const sortRows = (rows, orderBy = "expiry_date", order = "ASC") => {
   const direction = String(order).toUpperCase() === "DESC" ? -1 : 1;
@@ -119,6 +68,34 @@ const getCustomerProductRows = async ({ body, user }) => {
     `,
     values
   );
+
+};
+
+const getProductRemidersDetails = async ({ product_serial_number = null }) => {
+  if (!product_serial_number) {
+    return null;
+  }
+  const rows = await query(
+    `
+      SELECT
+        record_id,
+        MAX(sent_at) AS last_reminder_sent_at,
+        COUNT(*) AS reminder_count,
+        SUBSTRING_INDEX(GROUP_CONCAT(include_report ORDER BY sent_at DESC), ',', 1) AS last_reminder_include_report,
+        CASE
+          WHEN SUM(DATE(sent_at) = CURDATE()) > 0 THEN 1
+          ELSE 0
+        END AS sent_today
+      FROM ${DB_PREFIX}reminder_logs
+      WHERE status = 'sent'
+        AND related_to = 'product'
+        AND record_id = ?
+      GROUP BY record_id
+    `,
+    [product_serial_number]
+  );
+
+  return rows?.[0] || {};
 };
 
 const applyFilters = (rows, body = {}) => {
@@ -197,16 +174,18 @@ export const getProductExpiryReport = async ({ body = {}, user = {} } = {}) => {
   const customerRows = await getCustomerProductRows({ body, user });
   const rows = [];
 
-  customerRows.forEach((customer) => {
+  for (const customer of customerRows) {
     const products = parseJsonArray(customer.customer_products);
 
-    products.forEach((product) => {
+    for (const product of products) {
       const expiryDate = toDateOnly(product.expiry_date);
-      if (!expiryDate) return;
+      if (!expiryDate) continue;
 
       const daysLeft = getDaysLeft(expiryDate);
       const expiryStatus = getExpiryStatus(daysLeft, expiringDays);
-
+      const reminder_details = await getProductRemidersDetails({
+        product_serial_number: product.serial_number,
+      });
       rows.push({
         customer_id: customer.customer_id,
         customer_name: customer.customer_name,
@@ -222,9 +201,10 @@ export const getProductExpiryReport = async ({ body = {}, user = {} } = {}) => {
         days_left: daysLeft,
         expiry_status: expiryStatus,
         add_ons: product.add_ons || [],
+        ...reminder_details,
       });
-    });
-  });
+    }
+  }
 
   const filteredRows = applyFilters(rows, { ...body, expiring_days: expiringDays });
   const summary = buildSummary(filteredRows);

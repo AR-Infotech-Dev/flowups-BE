@@ -10,6 +10,7 @@ const upload = multer({
 });
 
 customerRoutes.post("/", requirePermission('customers', 'view'), customerController.list);
+customerRoutes.post("/download-excel", requirePermission('customers', 'view'), customerController.downloadExcel);
 customerRoutes.get("/import-template", requirePermission('customers', 'view'), customerController.downloadImportTemplate);
 customerRoutes.post("/import", requirePermission('customers', 'create'), upload.single("file"), customerController.importCustomers);
 customerRoutes.post("/delete", requirePermission('customers', 'delete'), customerController.changeStatus);

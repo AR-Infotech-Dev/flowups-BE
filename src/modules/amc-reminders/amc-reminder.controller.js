@@ -5,6 +5,7 @@ import { buildTablePayload } from "#shared/utils/tablePayload.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { sendEmail } from "#shared/utils/email.js";
 import { renderTemplate } from "#shared/utils/templateMaker.js"
+import { generateTicketNumber } from "#modules/ticket/ticket-number.helper.js"
 import { isAdminRole as isAdmin, isSuperAdminRole as isSuperAdmin } from "#shared/utils/role.utils.js";
 import { env } from "#config/env.js";
 import crypto from "crypto";
@@ -14,8 +15,7 @@ import {
   buildSideBySideRows,
   excelFormat
 } from "#shared/utils/excel.utils.js";
-
-const LIMIT = 10;
+const LIMIT = env.perPage;
 const createVisitToken = () => {
   return crypto.randomBytes(32).toString("hex");
 };
@@ -84,7 +84,7 @@ const formatDate = (value = null) => {
 };
 const ensureReminderTable = async () => {
   await query(`
-    CREATE TABLE IF NOT EXISTS ${DB_PREFIX}amc_reminder_logs (
+    CREATE TABLE IF NOT EXISTS ${DB_PREFIX}reminder_logs (
       reminder_id INT NOT NULL AUTO_INCREMENT,
       customer_id INT NOT NULL,
       company_id INT NULL,
@@ -167,10 +167,16 @@ const buildBaseWhere = ({ user = {}, searchText = "", filters = [] } = {}) => {
         }
         break;
       case "date_range": {
-        const dates = String(value || "").split("/");
-        if (dates.length === 2) {
+        const fromDate = typeof value === "object"
+          ? value?.from_date || value?.fromDate || ""
+          : String(value || "").split("/")[0] || "";
+        const toDate = typeof value === "object"
+          ? value?.to_date || value?.toDate || ""
+          : String(value || "").split("/")[1] || "";
+
+        if (fromDate && toDate) {
           where.push(`DATE(${column}) BETWEEN ? AND ?`);
-          values.push(dates[0], dates[1]);
+          values.push(fromDate, toDate);
         }
         break;
       }
@@ -285,12 +291,12 @@ const buildReportAttachment = async (customer = {}, supportRows = []) => {
     html: html,
   });
 };
-const insertReminderLog = async ({ customer, user, includeReport, subject, status = "sent", errorMessage = null }) => {
+export const insertReminderLog = async ({ customer, user, includeReport, subject, status = "sent", errorMessage = null, related_to, record_id = null }) => {
   await query(
     `
-      INSERT INTO ${DB_PREFIX}amc_reminder_logs
-      (customer_id, company_id, sent_by, sent_at, include_report, recipient_email, email_subject, status, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO ${DB_PREFIX}reminder_logs
+      (customer_id, company_id, sent_by, sent_at, include_report, recipient_email, email_subject, status, error_message,related_to,record_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       customer.customer_id,
@@ -302,6 +308,8 @@ const insertReminderLog = async ({ customer, user, includeReport, subject, statu
       subject,
       status,
       errorMessage,
+      related_to,
+      record_id
     ]
   );
 };
@@ -309,9 +317,10 @@ const hasReminderSentToday = async (customerId) => {
   const rows = await query(
     `
       SELECT reminder_id
-      FROM ${DB_PREFIX}amc_reminder_logs
+      FROM ${DB_PREFIX}reminder_logs
       WHERE customer_id = ?
         AND status = 'sent'
+        AND related_to = 'amc'
         AND DATE(sent_at) = CURDATE()
       LIMIT 1
     `,
@@ -412,7 +421,7 @@ export const createAmcCall = async (req, res) => {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "AMC customer not found" });
     }
 
-    const nextId = await CommonModel.getNextID(MODULE_TABLE, "ticket_id");
+    const ticketNo = await generateTicketNumber({ companyId :req.user.company_id });
     const today = new Date().toISOString().split("T")[0];
     const source = prepareTicketBody({
       ...req.body,
@@ -427,7 +436,7 @@ export const createAmcCall = async (req, res) => {
       active_amc: "y",
       call_direction: "out",
       amc_call: "y",
-      ticket_no: `TKT-${nextId}`,
+      ticket_no: ticketNo,
       company_id: customer.company_id || req.user.company_id || null,
       created_by: req.user.adminID,
       created_date: toMysqlDateTime(),
@@ -443,6 +452,74 @@ export const createAmcCall = async (req, res) => {
       message: "AMC call ticket created successfully.",
       data: {
         insertId: result.insertId,
+        ticket_id: result.insertId,
+        ticket_no: data.ticket_no,
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+export const createProductExpiryCall = async (req, res) => {
+  try {
+    const customerId = req.body.customer_id || req.body.customerId || req.body.client_id;
+    const product = req.body.product;
+    console.log(product);
+
+    if (!customerId) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "customer_id is required" });
+    }
+
+    const customerRows = await query(
+      `
+        SELECT customer_id, name, mobile_no, contact_person, company_id, is_amc
+        FROM ${DB_PREFIX}customer
+        WHERE customer_id = ?
+          AND is_amc = 'yes'
+          ${!isSuperAdmin(req.user) && req.user.company_id ? "AND company_id = ?" : ""}
+        LIMIT 1
+      `,
+      !isSuperAdmin(req.user) && req.user.company_id ? [customerId, req.user.company_id] : [customerId]
+    );
+    const customer = customerRows[0];
+
+    if (!customer) {
+      return failureResponse(res, { code: 2004, httpStatus: 404, message: "AMC customer not found" });
+    }
+
+    const ticketNo = await generateTicketNumber({ companyId :req.user.company_id });
+    const today = new Date().toISOString().split("T")[0];
+    const source = prepareTicketBody({
+      ...req.body,
+      client_id: customer.customer_id,
+      contact_person: req.body.contact_person || customer.contact_person || customer.name || "",
+      contact_no: req.body.contact_no || customer.mobile_no || "",
+      description: req.body.description || `Product Expiry call reminder created for ${customer.name || "customer"}.`,
+      assignee: req.body.assignee || req.user.adminID || null,
+      start_date: req.body.start_date || today,
+      due_date: req.body.due_date || today,
+      ticket_status: DEFAULT_TICKET_STATUS_CLOSE,
+      active_amc: "n",
+      call_direction: "out",
+      amc_call: "n",
+      ticket_no: ticketNo,
+      company_id: customer.company_id || req.user.company_id || null,
+      product_id: product.product_id,
+      product_name: product.product_name,
+      product_serial_number: product.serial_number,
+      created_by: req.user.adminID,
+      created_date: toMysqlDateTime(),
+      status: "active",
+    });
+
+    const data = await buildTablePayload(MODULE_TABLE, source);
+    const result = await CommonModel.saveMasterDetails({ table: MODULE_TABLE, data });
+
+    return successResponse(res, {
+      code: 1001,
+      httpStatus: 201,
+      message: "Product expiry remider call created successfully.",
+      data: {
         ticket_id: result.insertId,
         ticket_no: data.ticket_no,
       },
@@ -481,7 +558,8 @@ export const createAmcVisit = async (req, res) => {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "AMC customer not found" });
     }
 
-    const nextId = await CommonModel.getNextID(MODULE_TABLE, "ticket_id");
+    const ticketNo = await generateTicketNumber({ companyId :req.user.company_id });
+    
     const today = new Date().toISOString().split("T")[0];
     const assignee = req.body.employee_id || req.body.assignee || customer.responsible_person || req.user.adminID || null;
     const ticketSource = prepareTicketBody({
@@ -498,7 +576,7 @@ export const createAmcVisit = async (req, res) => {
       call_direction: "out",
       amc_call: "n",
       visit_required: "y",
-      ticket_no: `TKT-${nextId}`,
+      ticket_no: ticketNo,
       company_id: customer.company_id || req.user.company_id || null,
       created_by: req.user.adminID,
       created_date: toMysqlDateTime(),
@@ -657,8 +735,9 @@ export const activity = async (req, res) => {
     const reminders = await query(
       `
         SELECT reminder_id, sent_at, include_report, recipient_email, email_subject, status, error_message
-        FROM ${DB_PREFIX}amc_reminder_logs
+        FROM ${DB_PREFIX}reminder_logs
         WHERE customer_id = ?
+        AND related_to = "amc"
         ORDER BY sent_at DESC, reminder_id DESC
       `,
       [customerId]
@@ -712,8 +791,8 @@ export const list = async (req, res) => {
         LEFT JOIN ( SELECT client_id AS customer_id, COUNT(ticket_id) AS done_amc_call_count FROM ${DB_PREFIX}tickets WHERE amc_call = 'y' AND call_direction = 'out' AND status = 'active' AND created_date >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND created_date < DATE_ADD(DATE_FORMAT(CURDATE(), '%Y-%m-01'), INTERVAL 1 MONTH) GROUP BY client_id ) ac ON ac.customer_id = c.customer_id
         LEFT JOIN ( SELECT client_id AS customer_id, COUNT(ticket_id) AS amc_ticket_count FROM ${DB_PREFIX}tickets WHERE active_amc = 'y' AND status = 'active' GROUP BY client_id ) atc ON atc.customer_id = c.customer_id
         LEFT JOIN ( SELECT t.client_id AS customer_id, COUNT(CASE WHEN v.visit_status = 'scheduled' THEN 1 END) AS amc_visit_scheduled_count, COUNT(CASE WHEN v.visit_status = 'visited' THEN 1 END) AS amc_visited_count FROM ${DB_PREFIX}ticket_visits v INNER JOIN ${DB_PREFIX}tickets t ON v.ticket_id = t.ticket_id WHERE t.active_amc = 'y' AND t.status = 'active' AND v.status = 'active' GROUP BY t.client_id ) avc ON avc.customer_id = c.customer_id
-        LEFT JOIN ( SELECT customer_id, MAX(sent_at) AS last_reminder_sent_at, COUNT(*) AS reminder_count, SUBSTRING_INDEX(GROUP_CONCAT(include_report ORDER BY sent_at DESC), ',', 1) AS last_reminder_include_report FROM ${DB_PREFIX}amc_reminder_logs WHERE status = 'sent' GROUP BY customer_id ) rl ON rl.customer_id = c.customer_id
-        LEFT JOIN ( SELECT customer_id, MAX(reminder_id) AS reminder_id FROM ${DB_PREFIX}amc_reminder_logs WHERE status = 'sent' AND DATE(sent_at) = CURDATE() GROUP BY customer_id ) today_rl ON today_rl.customer_id = c.customer_id
+        LEFT JOIN ( SELECT customer_id, MAX(sent_at) AS last_reminder_sent_at, COUNT(*) AS reminder_count, SUBSTRING_INDEX(GROUP_CONCAT(include_report ORDER BY sent_at DESC), ',', 1) AS last_reminder_include_report FROM ${DB_PREFIX}reminder_logs WHERE status = 'sent' AND related_to = 'amc'GROUP BY customer_id ) rl ON rl.customer_id = c.customer_id
+        LEFT JOIN ( SELECT customer_id, MAX(reminder_id) AS reminder_id FROM ${DB_PREFIX}reminder_logs WHERE status = 'sent' AND related_to = 'amc' AND DATE(sent_at) = CURDATE() GROUP BY customer_id ) today_rl ON today_rl.customer_id = c.customer_id
     `;
 
     const countRows = await query(
@@ -829,6 +908,7 @@ export const sendReminder = async (req, res) => {
         subject,
         status: "failed",
         errorMessage: result.error || result.message || "Email sending failed",
+        related_to: 'amc'
       });
 
       return failureResponse(res, {
@@ -838,7 +918,7 @@ export const sendReminder = async (req, res) => {
       });
     }
 
-    await insertReminderLog({ customer, user: req.user, includeReport, subject });
+    await insertReminderLog({ customer, user: req.user, includeReport, subject, related_to: 'amc' });
 
     return successResponse(res, {
       code: 1002,
@@ -853,6 +933,8 @@ export const sendReminder = async (req, res) => {
       },
     });
   } catch (error) {
+    console.log(error);
+
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };

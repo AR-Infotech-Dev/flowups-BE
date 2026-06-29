@@ -3,7 +3,8 @@ import { query, DB_PREFIX } from "#config/database.js";
 import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
-import { buildTablePayload , pickValue } from "#shared/utils/tablePayload.js";
+import { buildTablePayload, pickValue } from "#shared/utils/tablePayload.js";
+import { env } from "#config/env.js";
 
 const MODULE_TABLE = "categories";
 
@@ -39,7 +40,9 @@ export const getcategoryDetails = async (req, res) => {
             filters = [],
         } = req.body;
 
-        const limit = 10;
+        // const limit = 10;
+        const limit = env.perPage;
+        
         const currentPage = Number(page || (curpage !== undefined ? Number(curpage) + 1 : 1)) || 1;
         const start = (currentPage - 1) * limit;
         const filterData = prepareFilterData({

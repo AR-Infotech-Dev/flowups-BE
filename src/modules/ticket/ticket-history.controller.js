@@ -58,7 +58,7 @@ export const history = async (req, res) => {
         const where = ["t.ticket_id = ?",];
         const values = [ticket_id,];
         const other = {
-            orderBy: "created_date",
+            orderBy: "history_id",
             order: "DESC",
         };
 

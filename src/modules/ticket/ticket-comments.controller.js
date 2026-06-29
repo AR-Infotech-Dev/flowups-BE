@@ -3,6 +3,7 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { buildTablePayload } from "#shared/utils/tablePayload.js";
+import { env } from "#config/env.js";
 
 const MODULE_TABLE = "tickets_comments";
 
@@ -31,7 +32,9 @@ export const list = async (req, res) => {
             filters,
         } = req.body;
 
-        const limit = 10;
+        // const limit = 10;
+        const limit = env.perPage;
+
         const currentPage = Number(page) || 1;
         const start = (currentPage - 1) * limit;
         const other1 = { orderBy, order, searchColumns: ["comment_text"] };

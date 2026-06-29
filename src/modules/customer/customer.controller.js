@@ -3,16 +3,18 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { validateBody } from "#shared/utils/bodyValidator.js";
-import { CUSTOMER_IMPORT_COLUMNS, CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
+import { CUSTOMER_EXCEL_COLUMNS, CUSTOMER_IMPORT_COLUMNS, CUSTOMER_PRODUCT_EXCEL_COLUMNS, CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
 import { customColumns, defaultColumns } from "./customer.filter.js";
 import { customerValidationRules } from "./customer.validation.js";
 import {
   createCustomer,
-  createCustomersBulk,
   deleteCustomers,
+  findCustomerProductSerialConflicts,
   findExistingCustomerDuplicateKeys,
   getCustomerById,
+  getCustomerContacts,
   getCustomerTableColumns,
+  replaceCustomerContacts,
   updateCustomer,
 } from "./customer.model.js";
 import {
@@ -22,12 +24,16 @@ import {
   findImportHeaderIndex,
   isSuperAdmin,
   normalizeCustomerProducts,
+  normalizeCustomerContacts,
   parseCustomerProducts,
   rowLooksEmpty,
   rowLooksLikeSampleRow,
   rowLooksLikeTemplateKeyRow,
 } from "./customer.utils.js";
 import * as XLSX from "xlsx";
+import { renderTemplate } from "#shared/utils/templateMaker.js";
+import { buildSheetSpacerRow, excelFormat, sendExcelDownload } from "#shared/utils/excel.utils.js";
+import { env } from "#config/env.js";
 
 const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } = {}) => {
   const normalizedName = String(name || "").trim().toLowerCase();
@@ -40,13 +46,158 @@ const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } 
   return `${company_id ?? "no-company"}::${normalizedName}::${normalizedEmail}`;
 };
 
+const getDuplicateSerialNumbers = (products = []) => {
+  const seen = new Set();
+  const duplicates = new Set();
+
+  products.forEach((product) => {
+    const serial = String(product?.serial_number || "").trim().toLowerCase();
+    if (!serial) return;
+
+    if (seen.has(serial)) {
+      duplicates.add(String(product.serial_number || "").trim());
+      return;
+    }
+
+    seen.add(serial);
+  });
+
+  return [...duplicates];
+};
+
+const validateCustomerProductSerials = async ({ products = [], excludeCustomerId = null } = {}) => {
+  const duplicateSerials = getDuplicateSerialNumbers(products);
+
+  if (duplicateSerials.length) {
+    return {
+      isValid: false,
+      message: `Duplicate product serial number in this customer: ${duplicateSerials.join(", ")}`,
+    };
+  }
+
+  const conflicts = await findCustomerProductSerialConflicts({
+    serialNumbers: products.map((product) => product.serial_number),
+    excludeCustomerId,
+  });
+
+  if (conflicts.length) {
+    const conflict = conflicts[0];
+    return {
+      isValid: false,
+      message: `Product serial number ${conflict.serial_number} already exists for customer ${conflict.customer_name || conflict.customer_id}`,
+    };
+  }
+
+  return { isValid: true };
+};
+
+const validateCustomerImportContacts = (contacts = []) => {
+  if (!contacts.length) {
+    return { isValid: false, message: "At least one contact person is required" };
+  }
+
+  const invalidContact = contacts.find((contact) => !contact.name || !contact.mobile_no);
+  if (invalidContact) {
+    return { isValid: false, message: "Contact name and mobile number are required" };
+  }
+
+  const invalidMobile = contacts.find((contact) => !/^[0-9]\d{9}$/.test(String(contact.mobile_no || "")));
+  if (invalidMobile) {
+    return { isValid: false, message: `Contact mobile number ${invalidMobile.mobile_no || ""} must be a valid 10-digit number` };
+  }
+
+  const invalidEmail = contacts.find((contact) => contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(contact.email).trim()));
+  if (invalidEmail) {
+    return { isValid: false, message: `Contact email ${invalidEmail.email} must be a valid email` };
+  }
+
+  const primaryCount = contacts.filter((contact) => contact.is_primary === "y").length;
+  if (primaryCount !== 1) {
+    return { isValid: false, message: "One primary contact is required" };
+  }
+
+  return { isValid: true };
+};
+
+const normalizeSkipColumns = (value = []) => {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const normalizeSelectedColumns = (value = []) => normalizeSkipColumns(value);
+
+const getExportColumns = ({ selectedColumns = [], skipColumns = [] } = {}) => {
+  const skipSet = new Set(normalizeSkipColumns(skipColumns).map((item) => item.toLowerCase()));
+  const selectedList = normalizeSelectedColumns(selectedColumns).map((item) => item.toLowerCase());
+  const allColumns = [...CUSTOMER_EXCEL_COLUMNS, ...CUSTOMER_PRODUCT_EXCEL_COLUMNS];
+  const productKeys = new Set(["customer_products", "products"]);
+
+  const filterSkipped = (columns = []) => columns.filter((column) => {
+    if (column.skip === true) return false;
+    return !skipSet.has(String(column.key || "").toLowerCase()) && !skipSet.has(String(column.header || "").toLowerCase());
+  });
+
+  if (selectedList.length) {
+    const columnsByKey = new Map(allColumns.map((column) => [String(column.key || "").toLowerCase(), column]));
+    const columnsByHeader = new Map(allColumns.map((column) => [String(column.header || "").toLowerCase(), column]));
+    const selectedExportColumns = [];
+
+    selectedList.forEach((key) => {
+      if (productKeys.has(key)) {
+        selectedExportColumns.push(...CUSTOMER_PRODUCT_EXCEL_COLUMNS);
+        return;
+      }
+
+      const column = columnsByKey.get(key) || columnsByHeader.get(key);
+      if (column) selectedExportColumns.push(column);
+    });
+
+    return filterSkipped([...new Map(selectedExportColumns.map((column) => [column.key, column])).values()]);
+  }
+
+  return filterSkipped(allColumns);
+};
+
+const joinProductValues = (products = [], field = "") => {
+  if (!products.length) return "-";
+
+  const values = products.map((product) => {
+    const value = product?.[field];
+    if (Array.isArray(value)) return value.filter(Boolean).join("+") || "-";
+    return value === null || value === undefined || value === "" ? "-" : value;
+  });
+
+  return values.join(",");
+};
+
+const buildCustomerExportRow = (customer = {}) => {
+  const products = normalizeCustomerProducts(customer.customer_products);
+
+  return {
+    ...customer,
+    product_ids: joinProductValues(products, "product_id"),
+    product_names: joinProductValues(products, "product_name"),
+    serial_numbers: joinProductValues(products, "serial_number"),
+    product_expiry_dates: joinProductValues(products, "expiry_date"),
+    product_add_ons: joinProductValues(products, "add_ons"),
+  };
+};
+
 // ======================================================
 // LIST CUSTOMERS
 // ======================================================
 export const list = async (req, res) => {
   try {
     const { page = 1, searchText = "", getAll = "N", order_by = "created_date", order = "DESC", filters = [], } = req.body;
-    const limit = 10;
+    // const limit = env. 10;
+    const limit = env.perPage;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 
@@ -54,7 +205,7 @@ export const list = async (req, res) => {
       filters,
       searchText,
       other: {
-        orderBy : order_by,
+        orderBy: order_by,
         order,
         searchColumns: CUSTOMER_SEARCH_COLUMNS,
       },
@@ -105,7 +256,6 @@ export const list = async (req, res) => {
     });
   }
 };
-
 // ======================================================
 // CREATE / UPDATE / GET SINGLE
 // ======================================================
@@ -126,13 +276,27 @@ export const getCustomerDetails = async (req, res) => {
         }
 
         const data = validation.data;
+        const customerContacts = normalizeCustomerContacts(req.body.customer_contacts ?? req.body.contact_persons);
+        const customerProducts = normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids);
+        const serialValidation = await validateCustomerProductSerials({ products: customerProducts });
+        if (!serialValidation.isValid) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: serialValidation.message,
+          });
+        }
+
         delete data.product_ids;
-        data.customer_products = JSON.stringify(normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids));
+        delete data.customer_contacts;
+        delete data.contact_persons;
+        data.customer_products = JSON.stringify(customerProducts);
         data.created_by = req.user.adminID;
         data.company_id = req.user.company_id;
         data.created_date = toMysqlDateTime();
 
         const result = await createCustomer(data);
+        await replaceCustomerContacts({ customerId: result.insertId, contacts: customerContacts, user: req.user });
 
         return successResponse(res, {
           code: 1001,
@@ -161,9 +325,22 @@ export const getCustomerDetails = async (req, res) => {
         }
 
         const data = validation.data;
+        const customerContacts = normalizeCustomerContacts(req.body.customer_contacts ?? req.body.contact_persons);
+        const customerProducts = normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids);
+        const serialValidation = await validateCustomerProductSerials({ products: customerProducts, excludeCustomerId: customer_id });
+        if (!serialValidation.isValid) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: serialValidation.message,
+          });
+        }
+
         delete data.customer_id;
         delete data.product_ids;
-        data.customer_products = JSON.stringify(normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids));
+        delete data.customer_contacts;
+        delete data.contact_persons;
+        data.customer_products = JSON.stringify(customerProducts);
         delete data.created_by;
         data.modified_by = req.user.adminID;
 
@@ -175,6 +352,8 @@ export const getCustomerDetails = async (req, res) => {
             httpStatus: 404,
           });
         }
+
+        await replaceCustomerContacts({ customerId: customer_id, contacts: customerContacts, user: req.user });
 
         return successResponse(res, {
           code: 1002,
@@ -202,9 +381,12 @@ export const getCustomerDetails = async (req, res) => {
 
         const customerData = details[0];
         const products = parseCustomerProducts(customerData.customer_products);
+        const contacts = await getCustomerContacts(customer_id);
         customerData.product_ids = products.map((product) => product.product_id);
         customerData.customer_products = products;
         customerData.products = products;
+        customerData.customer_contacts = contacts;
+        customerData.contact_persons = contacts;
 
         return successResponse(res, {
           code: 1004,
@@ -365,13 +547,21 @@ export const importCustomers = async (req, res) => {
         continue;
       }
 
-      if (!rowData.name || !rowData.mobile_no) {
+      if (!rowData.name || !(rowData.contact_mobiles || rowData.mobile_no)) {
         skipped += 1;
-        errors.push({ row: rowNumber, message: "Customer Name and Mobile No are required" });
+        errors.push({ row: rowNumber, message: "Customer Name and Contact Mobiles are required" });
         continue;
       }
 
       const payload = buildCustomerPayloadFromImport(rowData, req.user);
+      const contacts = normalizeCustomerContacts(payload.customer_contacts);
+      const contactValidation = validateCustomerImportContacts(contacts);
+      if (!contactValidation.isValid) {
+        skipped += 1;
+        errors.push({ row: rowNumber, message: contactValidation.message });
+        continue;
+      }
+
       const validation = validateBody(payload, customerValidationRules);
 
       if (!validation.isValid) {
@@ -383,36 +573,71 @@ export const importCustomers = async (req, res) => {
       validRows.push({
         rowNumber,
         payload,
+        contacts,
       });
     }
 
     const existingDuplicateKeys = await findExistingCustomerDuplicateKeys(validRows.map((row) => row.payload));
-    const rowsToInsert = [];
+    const rowsToCreate = [];
+    const importSerialNumbers = new Set();
 
-    validRows.forEach(({ rowNumber, payload }) => {
+    for (const { rowNumber, payload, contacts } of validRows) {
       const duplicateKey = buildCustomerDuplicateKey(payload);
       if (duplicateKey) {
         if (importDuplicateKeys.has(duplicateKey)) {
           skipped += 1;
           errors.push({ row: rowNumber, message: "Duplicate customer skipped from import file. Same Customer Name and Email already exists in this file." });
-          return;
+          continue;
         }
 
         if (existingDuplicateKeys.has(duplicateKey)) {
           skipped += 1;
           errors.push({ row: rowNumber, message: "Duplicate customer skipped. Same Customer Name and Email already exists." });
-          return;
+          continue;
         }
 
         importDuplicateKeys.add(duplicateKey);
       }
 
-      const insertPayload = filterPayloadByColumns(payload, tableColumns);
-      rowsToInsert.push(insertPayload);
-    });
+      const products = parseCustomerProducts(payload.customer_products);
+      const rowDuplicateSerials = getDuplicateSerialNumbers(products);
+      if (rowDuplicateSerials.length) {
+        skipped += 1;
+        errors.push({ row: rowNumber, message: `Duplicate product serial number in this customer: ${rowDuplicateSerials.join(", ")}` });
+        continue;
+      }
 
-    if (rowsToInsert.length) {
-      inserted = await createCustomersBulk(rowsToInsert);
+      const repeatedImportSerial = products
+        .map((product) => String(product?.serial_number || "").trim())
+        .find((serial) => serial && importSerialNumbers.has(serial.toLowerCase()));
+      if (repeatedImportSerial) {
+        skipped += 1;
+        errors.push({ row: rowNumber, message: `Duplicate product serial number skipped from import file: ${repeatedImportSerial}` });
+        continue;
+      }
+
+      const serialValidation = await validateCustomerProductSerials({ products });
+      if (!serialValidation.isValid) {
+        skipped += 1;
+        errors.push({ row: rowNumber, message: serialValidation.message });
+        continue;
+      }
+
+      products.forEach((product) => {
+        const serial = String(product?.serial_number || "").trim().toLowerCase();
+        if (serial) importSerialNumbers.add(serial);
+      });
+
+      const insertPayload = filterPayloadByColumns(payload, tableColumns);
+      rowsToCreate.push({ payload: insertPayload, contacts });
+    }
+
+    for (const row of rowsToCreate) {
+      const result = await createCustomer(row.payload);
+      if (result?.insertId) {
+        await replaceCustomerContacts({ customerId: result.insertId, contacts: row.contacts, user: req.user });
+      }
+      inserted += result?.affectedRows || 1;
     }
 
     return successResponse(res, {
@@ -425,6 +650,68 @@ export const importCustomers = async (req, res) => {
         errors,
       },
     });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+
+export const downloadExcel = async (req, res) => {
+  try {
+    const payload = req.method === "GET" ? req.query : req.body;
+    const { searchText = "", order_by = "created_date", order = "DESC", filters = [], selectedColumns = [], visibleColumns = [], skipColumns = [], excludeColumns = [], } = payload || {};
+    const filterData = prepareFilterData({
+      filters,
+      searchText,
+      other: {
+        orderBy: order_by,
+        order,
+        searchColumns: CUSTOMER_SEARCH_COLUMNS,
+      },
+      default_columns: defaultColumns,
+      custom_columns: customColumns,
+    });
+
+    const { select, where, values, join, other } = filterData;
+    other.freeTextSearch = searchText;
+    other.searchColumns = CUSTOMER_SEARCH_COLUMNS;
+
+    // FILTER DATA ACCORDING TO COMPANY ID
+    if (!isSuperAdmin(req.user) && req.user.company_id) {
+      where.push("t.company_id = ?");
+      values.push(req.user.company_id);
+    }
+
+    const customerDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other, });
+    const rows = customerDetails.map(buildCustomerExportRow);
+    const headers = getExportColumns({
+      selectedColumns: normalizeSelectedColumns(selectedColumns).length ? selectedColumns : visibleColumns,
+      skipColumns: [...normalizeSkipColumns(skipColumns), ...normalizeSkipColumns(excludeColumns)],
+    });
+    const spreadsheetColumnCount = headers.length || 1;
+
+    const htmlBody = await renderTemplate(
+      "customerExport",
+      "excel",
+      {
+        spreadsheetColumnCount,
+        exportTitle: "Customers",
+        spacerRow: await buildSheetSpacerRow(18, spreadsheetColumnCount),
+        headers,
+        rows,
+      }
+    );
+    const excelAttachment = {
+      filename: "Customer-Export.xls",
+      content: await excelFormat(htmlBody),
+      contentType: "application/vnd.ms-excel",
+    };
+
+    return sendExcelDownload(res, excelAttachment);
   } catch (error) {
     return failureResponse(res, {
       code: 2008,
