@@ -16,6 +16,7 @@ const MODULE_TABLE = "admin";
 const USER_LOCATION_LOGS_TABLE = "user_location_logs";
 
 const locationLogSchema = Joi.object({
+  status: Joi.alternatives().try(Joi.string()).required(),
   latitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
   longitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
   location: Joi.string().allow("", null),
