@@ -41,6 +41,7 @@ const normalizeJsonValue = (value) => {
 };
 
 const getLocationPayload = (body = {}) => ({
+  status: body.status ?? body.status,
   latitude: body.latitude ?? body.lat,
   longitude: body.longitude ?? body.lng,
   location: body.location ?? body.google_location ?? body.address ?? null,
@@ -88,7 +89,7 @@ const saveUserLocationLog = async ({ req, eventType }) => {
       longitude: String(data.longitude),
       location: data.location || null,
       alive_data: aliveData,
-      status: "active",
+      status: String(data.status),
       created_by: adminID,
       created_date: now,
     }),
@@ -97,6 +98,7 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   await CommonModel.updateMasterDetails({
     table: MODULE_TABLE,
     data: sanitizeSqlPayload({
+      status: String(data.status),
       latitude: String(data.latitude),
       longitude: String(data.longitude),
       alive_data: aliveData,
