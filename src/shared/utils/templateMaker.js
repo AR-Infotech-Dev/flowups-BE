@@ -12,6 +12,8 @@ Handlebars.registerHelper("getValue", (obj, key) => {
     return value;
 });
 
+Handlebars.registerHelper("eq", (a, b) => a === b);
+
 const parseArrayValue = (value) => {
     if (Array.isArray(value)) return value;
     if (typeof value !== "string") return [];

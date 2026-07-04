@@ -4,6 +4,7 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { buildTablePayload, pickValue } from "#shared/utils/tablePayload.js";
+import { isSuperAdminRole as isSuperAdmin } from "#shared/utils/role.utils.js";
 import { env } from "#config/env.js";
 
 const MODULE_TABLE = "categories";
@@ -29,7 +30,7 @@ export const getcategoryDetails = async (req, res) => {
             curpage,
             category_id = "",
             is_parent = "",
-            orderBy = "categories_index",
+            orderBy = "created_date",
             order = "ASC",
             status = "",
             parent_id = "",
@@ -42,7 +43,6 @@ export const getcategoryDetails = async (req, res) => {
 
         // const limit = 10;
         const limit = env.perPage;
-        
         const currentPage = Number(page || (curpage !== undefined ? Number(curpage) + 1 : 1)) || 1;
         const start = (currentPage - 1) * limit;
         const filterData = prepareFilterData({
@@ -60,6 +60,12 @@ export const getcategoryDetails = async (req, res) => {
         const { select, where, values, join, other } = filterData;
         other.freeTextSearch = searchText;
         other.searchColumns = ["t.categoryName", "t.slug", "t.description"];
+        // console.log(other);
+
+        if (!isSuperAdmin(req.user) && req.user.company_id) {
+            where.push("t.company_id = ?");
+            values.push(req.user.company_id);
+        }
 
         if (category_id) {
             addInFilter(where, values, "t.category_id", category_id);
@@ -196,6 +202,7 @@ export const categoryMaster = async (req, res) => {
                 const data = await buildTablePayload(MODULE_TABLE, {
                     ...payload,
                     status: req.body.status || "active",
+                    company_id: req.user.company_id || null,
                     created_by: req.user.adminID,
                     created_date: toMysqlDateTime(),
                 });
@@ -302,11 +309,12 @@ export const categoryMaster = async (req, res) => {
 // ======================================================
 // CHANGE STATUS
 // ======================================================
-export const CategoryChangeStatus = async (req, res) => {
-    try {
-        const { action = "", list = [], status = "" } = req.body;
 
-        if (action.trim() !== "changeStatus") {
+export const changeStatus = async (req, res) => {
+    try {
+        const { action = "", ids = [] } = req.body;
+
+        if (action.trim().toLowerCase() !== "delete") {
             return failureResponse(res, {
                 code: 2000,
                 httpStatus: 400,
@@ -314,19 +322,26 @@ export const CategoryChangeStatus = async (req, res) => {
             });
         }
 
-        const ids = normalizeIds(list);
-        if (!ids.length || !status) {
+        if (!Array.isArray(ids) || !ids.length) {
             return failureResponse(res, {
                 code: 2001,
                 httpStatus: 400,
-                message: "list and status are required",
+                message: "ids are required",
             });
         }
 
-        await updateCategoryStatus(ids, status);
+        const where = { category_id: ids };
+        if (!isSuperAdmin(req.user) && req.user.company_id) {
+            where.company_id = req.user.company_id;
+        }
+        where.is_sys_category = 'no';
+        await CommonModel.deleteMasterDetails({
+            table: MODULE_TABLE,
+            where,
+        });
 
         return successResponse(res, {
-            code: 1002,
+            code: 1003,
             httpStatus: 200,
             data: [],
         });

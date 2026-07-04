@@ -16,6 +16,7 @@ const MODULE_TABLE = "admin";
 const USER_LOCATION_LOGS_TABLE = "user_location_logs";
 
 const locationLogSchema = Joi.object({
+  status: Joi.alternatives().try(Joi.string()).required(),
   latitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
   longitude: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
   location: Joi.string().allow("", null),
@@ -41,6 +42,7 @@ const normalizeJsonValue = (value) => {
 };
 
 const getLocationPayload = (body = {}) => ({
+  status: body.status ?? body.status,
   latitude: body.latitude ?? body.lat,
   longitude: body.longitude ?? body.lng,
   location: body.location ?? body.google_location ?? body.address ?? null,
@@ -88,7 +90,7 @@ const saveUserLocationLog = async ({ req, eventType }) => {
       longitude: String(data.longitude),
       location: data.location || null,
       alive_data: aliveData,
-      status: "active",
+      status: String(data.status),
       created_by: adminID,
       created_date: now,
     }),
@@ -97,6 +99,7 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   await CommonModel.updateMasterDetails({
     table: MODULE_TABLE,
     data: sanitizeSqlPayload({
+      status: String(data.status),
       latitude: String(data.latitude),
       longitude: String(data.longitude),
       alive_data: aliveData,
@@ -889,6 +892,7 @@ export const updateProfile = async (req, res) => {
 
     const editableData = {
       email: req.body.email,
+      dateOfBirth: req.body.dateOfBirth,
       whatsappNo: req.body.whatsappNo ?? req.body.whatsapp_no ?? req.body.wa_no,
       address: req.body.address,
       userName: req.body.userName ?? req.body.user_name,
@@ -896,6 +900,7 @@ export const updateProfile = async (req, res) => {
 
     const profileSchema = Joi.object({
       email: Joi.string().email().required(),
+      dateOfBirth: Joi.string().allow("", null),
       whatsappNo: Joi.string().allow("", null),
       address: Joi.string().allow("", null),
       userName: Joi.string().trim().min(3).required(),

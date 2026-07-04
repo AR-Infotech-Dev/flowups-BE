@@ -4,7 +4,7 @@ export const CUSTOMER_SEARCH_COLUMNS = [
   "t.name",
   "t.email",
   "t.mobile_no",
-  "t.company_name",
+  "dc.company_name",
   "t.pan_number",
 ];
 
