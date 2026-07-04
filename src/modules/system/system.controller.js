@@ -104,6 +104,9 @@ export const getFreeTextSearch = async (req, res) => {
     if (!isSuperAdmin(req.user) && isCompanyWise === true) {
       where.push(`t.company_id = ${req.user.company_id} `);
     }
+    if (tableName === "categories") {
+      where.push(`t.is_parent = 'yes' `);
+    }
     const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values });
     if (result.length) {
       return successResponse(res, {
@@ -258,12 +261,6 @@ export const getslugList = async (req, res) => {
       );
       values.push(...catArr);
     }
-    if (isCompanyWise) {
-      const catArr = String(category_id).split(",");
-      req.user.company_id
-      where.push(`t.company_id`);
-      values.push(req.user.company_id);
-    }
 
     // ===============================
     // MAIN CATEGORY LIST
@@ -282,20 +279,26 @@ export const getslugList = async (req, res) => {
     // ===============================
     // CHILD CATEGORY LIST
     // ===============================
+    const childW = [
+      "t.parent_id = ?",
+      "t.status = ?",
+    ];
+
+    if (!isSuperAdmin(req.user) && isCompanyWise === true) {
+      childW.push(`(t.company_id = ${req.user.company_id} OR t.is_sys_category = 'yes' )`);
+    }
+
     for (const row of categoryDetails) {
+      const childV = [
+        row.category_id,
+        "active",
+      ];
       row.sublist =
         await CommonModel.GetMasterListDetails({
-          select:
-            "t.category_id,t.slug,t.categoryName,t.parent_id,t.is_parent,t.categories_index,t.cat_color",
+          select: "t.category_id,t.slug,t.categoryName,t.parent_id,t.is_parent,t.categories_index,t.cat_color",
           table: "categories",
-          where: [
-            "t.parent_id = ?",
-            "t.status = ?",
-          ],
-          values: [
-            row.category_id,
-            "active",
-          ],
+          where: childW,
+          values:childV,
           join,
           other,
         });

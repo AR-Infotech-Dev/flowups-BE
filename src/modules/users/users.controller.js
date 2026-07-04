@@ -892,6 +892,7 @@ export const updateProfile = async (req, res) => {
 
     const editableData = {
       email: req.body.email,
+      dateOfBirth: req.body.dateOfBirth,
       whatsappNo: req.body.whatsappNo ?? req.body.whatsapp_no ?? req.body.wa_no,
       address: req.body.address,
       userName: req.body.userName ?? req.body.user_name,
@@ -899,6 +900,7 @@ export const updateProfile = async (req, res) => {
 
     const profileSchema = Joi.object({
       email: Joi.string().email().required(),
+      dateOfBirth: Joi.string().allow("", null),
       whatsappNo: Joi.string().allow("", null),
       address: Joi.string().allow("", null),
       userName: Joi.string().trim().min(3).required(),

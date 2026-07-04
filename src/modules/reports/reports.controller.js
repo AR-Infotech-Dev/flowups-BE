@@ -1,6 +1,6 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import { failureResponse, successResponse } from "#shared/utils/apiResponse.js";
-import { buildReportAttachment, buildSupportReportTemplate, buildPerformanceExcelAttachment, parseJsonArray, isActiveAMC, formatDate, stripHtml, } from "#shared/utils/report.utils.js";
+import { buildReportAttachment, buildSupportReportTemplate, buildPerformanceExcelAttachment, buildCustomerWiseExcelAttachment, parseJsonArray, isActiveAMC, formatDate, stripHtml, } from "#shared/utils/report.utils.js";
 import { sendEmail } from "#shared/utils/email.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { isSuperAdminRole as isSuperAdmin } from "#shared/utils/role.utils.js";
@@ -902,6 +902,390 @@ export const customerReport = async (req, res) => {
     });
   }
 };
+
+const getCustomerwiseTickets = async ({ companyId, body, isExport = false, }) => {
+  const currentPage = Math.max(Number(body.page) || 1, 1);
+  const safeLimit = Math.min(Math.max(Number(body.limit) || 20, 1), 100);
+  const offset = (currentPage - 1) * safeLimit;
+  const searchText = String(body.searchText || "").trim();
+  const customerWhere = [
+    "c.status = 'active'",
+    "c.company_id = ?",
+  ];
+  const customerValues = [companyId];
+  const ticketJoin = [
+    "t.client_id = c.customer_id",
+    "t.status = 'active'",
+    "t.company_id = c.company_id",
+  ];
+  const ticketValues = [];
+  if (body.from_date) {
+    ticketJoin.push("DATE(t.created_date) >= ?");
+    ticketValues.push(body.from_date);
+  }
+
+  if (body.to_date) {
+    ticketJoin.push("DATE(t.created_date) <= ?");
+    ticketValues.push(body.to_date);
+  }
+
+  if (searchText) {
+    customerWhere.push(
+      "(c.name LIKE ? OR c.email LIKE ? OR c.mobile_no LIKE ?)"
+    );
+
+    const value = `%${searchText}%`;
+
+    customerValues.push(value, value, value);
+  }
+
+  const joinSql = ticketJoin.join(" AND ");
+  const whereSql = customerWhere.join(" AND ");
+
+  const paginationSql = isExport
+    ? ""
+    : `LIMIT ${safeLimit} OFFSET ${offset}`;
+
+  const [companyRows, countRows, summaryRows, customerRows,] = await Promise.all([query(
+    `SELECT company_id, company_name
+       FROM ${DB_PREFIX}company_master
+       WHERE company_id = ?
+       LIMIT 1`,
+    [companyId]
+  ),
+
+  query(
+    `SELECT COUNT(*) AS total
+       FROM ${DB_PREFIX}customer c
+       WHERE ${whereSql}`,
+    customerValues
+  ),
+
+  query(
+    `
+      SELECT
+        COUNT(DISTINCT c.customer_id) AS total_customers,
+        COUNT(DISTINCT CASE WHEN t.ticket_id IS NOT NULL THEN c.customer_id END) AS customers_with_tickets,
+        COUNT(DISTINCT CASE WHEN t.ticket_id IS NULL THEN c.customer_id END) AS customers_without_tickets,
+        COUNT(t.ticket_id) AS total_tickets,
+        COALESCE(SUM(CASE WHEN t.ticket_status = 205 THEN 1 ELSE 0 END),0) AS open_tickets,
+        COALESCE(SUM(CASE WHEN t.ticket_status IN (206,210) THEN 1 ELSE 0 END),0) AS in_progress_tickets,
+        COALESCE(SUM(CASE WHEN t.ticket_status = ? THEN 1 ELSE 0 END),0) AS closed_tickets,
+        COALESCE(SUM(
+            CASE
+                WHEN t.ticket_id IS NOT NULL
+                AND t.due_date < CURRENT_DATE
+                AND t.ticket_status <> ?
+                THEN 1
+                ELSE 0
+            END
+        ),0) AS overdue_tickets
+      FROM ${DB_PREFIX}customer c
+      LEFT JOIN ${DB_PREFIX}tickets t
+      ON ${joinSql}
+      WHERE ${whereSql}
+      `,
+    [CLOSED_STATUS, CLOSED_STATUS, ...ticketValues, ...customerValues]
+  ),
+
+  query(
+    `
+      SELECT
+          c.customer_id,
+          c.name AS customer_name,
+          c.contact_person,
+          c.mobile_no,
+          c.email,
+          c.is_amc,
+          COUNT(t.ticket_id) total_tickets,
+          COALESCE(SUM(CASE WHEN t.ticket_status=205 THEN 1 ELSE 0 END),0) open_tickets,
+          COALESCE(SUM(CASE WHEN t.ticket_status IN (206,210) THEN 1 ELSE 0 END),0) in_progress_tickets,
+          COALESCE(SUM(CASE WHEN t.ticket_status=? THEN 1 ELSE 0 END),0) closed_tickets,
+          COALESCE(SUM(
+              CASE
+                  WHEN t.ticket_id IS NOT NULL
+                  AND t.due_date<CURRENT_DATE
+                  AND t.ticket_status<>?
+                  THEN 1
+                  ELSE 0
+              END
+          ),0) overdue_tickets,
+          MAX(t.created_date) last_ticket_date,
+          SUBSTRING_INDEX(
+              GROUP_CONCAT(t.ticket_no ORDER BY t.created_date DESC,t.ticket_id DESC),
+              ',',1
+          ) last_ticket_no,
+
+          SUBSTRING_INDEX(
+              GROUP_CONCAT(ticketStatus.categoryName ORDER BY t.created_date DESC,t.ticket_id DESC),
+              ',',1
+          ) last_ticket_status
+      FROM ${DB_PREFIX}customer c
+      LEFT JOIN ${DB_PREFIX}tickets t
+      ON ${joinSql}
+      LEFT JOIN ${DB_PREFIX}categories ticketStatus
+      ON ticketStatus.category_id=t.ticket_status
+      WHERE ${whereSql}
+      GROUP BY
+      c.customer_id,
+      c.name,
+      c.contact_person,
+      c.mobile_no,
+      c.email,
+      c.is_amc
+      ORDER BY total_tickets DESC,c.name ASC
+      ${paginationSql}
+      `,
+    [CLOSED_STATUS, CLOSED_STATUS, ...ticketValues, ...customerValues]
+  ),
+  ]);
+
+  return {
+    company: companyRows[0] || { company_id: companyId },
+    summary: summaryRows[0] || {},
+    customers: customerRows,
+    total: Number(countRows[0]?.total || 0),
+    pagination: !isExport ? {
+      page: currentPage,
+      limit: safeLimit,
+      total: Number(countRows[0]?.total || 0),
+      totalPages: Math.ceil(Number(countRows[0]?.total || 0) / safeLimit),
+      start:
+        Number(countRows[0]?.total || 0) === 0 ? 0 : offset + 1,
+      end: Math.min(offset + safeLimit, Number(countRows[0]?.total || 0)),
+    } : {},
+    filters: {
+      company_id: String(companyId),
+      from_date: body.from_date || "",
+      to_date: body.to_date || "",
+      searchText,
+    },
+  };
+};
+export const companyCustomerTicketReport = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const companyId = !isSuperAdmin(req.user)
+      ? req.user.company_id
+      : body.company_id;
+    console.log('companyId : ', companyId);
+
+    if (!companyId) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Company is required.",
+      });
+    }
+
+    const report = await getCustomerwiseTickets({ companyId, body, isExport: false, });
+    return successResponse(res, {
+      code: 1004,
+      httpStatus: 200,
+      data: {
+        data: report
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+export const userAttendanceReport = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const userId = Number(body.user_id);
+
+    if (!userId) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "User is required.",
+      });
+    }
+
+    if (body.from_date && body.to_date && body.from_date > body.to_date) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "From date cannot be after to date.",
+      });
+    }
+
+    const currentPage = Math.max(Number(body.page) || 1, 1);
+    const safeLimit = Math.min(Math.max(Number(body.limit) || 20, 1), 100);
+    const offset = (currentPage - 1) * safeLimit;
+    const companyId = !isSuperAdmin(req.user) ? req.user.company_id : body.company_id;
+    // Sign-out logs are intentionally stored with status "inactive".
+    const where = ["l.adminID = ?"];
+    const values = [userId];
+
+    if (companyId) {
+      where.push("l.company_id = ?");
+      values.push(companyId);
+    }
+
+    if (body.from_date) {
+      where.push("DATE(l.created_date) >= ?");
+      values.push(body.from_date);
+    }
+
+    if (body.to_date) {
+      where.push("DATE(l.created_date) <= ?");
+      values.push(body.to_date);
+    }
+
+    const userWhere = ["a.adminID = ?"];
+    const userValues = [userId];
+    if (companyId) {
+      userWhere.push("a.company_id = ?");
+      userValues.push(companyId);
+    }
+
+    const userRows = await query(
+      `
+        SELECT
+          a.adminID AS user_id,
+          a.name AS user_name,
+          a.email,
+          a.userName AS username,
+          a.company_id,
+          cm.company_name
+        FROM ${DB_PREFIX}admin a
+        LEFT JOIN ${DB_PREFIX}company_master cm ON cm.company_id = a.company_id
+        WHERE ${userWhere.join(" AND ")}
+        LIMIT 1
+      `,
+      userValues
+    );
+
+    if (!userRows.length) {
+      return failureResponse(res, {
+        code: 2004,
+        httpStatus: 404,
+        message: "User not found.",
+      });
+    }
+
+    const locationSql = `
+      NULLIF(
+        COALESCE(
+          NULLIF(l.location, ''),
+          CONCAT_WS(', ', NULLIF(l.latitude, ''), NULLIF(l.longitude, ''))
+        ),
+        ''
+      )
+    `;
+    const dailySql = `
+      SELECT
+        DATE(l.created_date) AS attendance_date,
+        MIN(CASE WHEN l.event_type = 'signin' THEN l.created_date END) AS sign_in_at,
+        MAX(CASE WHEN l.event_type = 'signout' THEN l.created_date END) AS sign_out_at,
+        SUM(CASE WHEN l.event_type = 'signin' THEN 1 ELSE 0 END) AS sign_in_count,
+        SUM(CASE WHEN l.event_type = 'signout' THEN 1 ELSE 0 END) AS sign_out_count,
+        SUBSTRING_INDEX(
+          GROUP_CONCAT(CASE WHEN l.event_type = 'signin' THEN ${locationSql} END ORDER BY l.created_date ASC, l.log_id ASC SEPARATOR '||'),
+          '||',
+          1
+        ) AS sign_in_location,
+        SUBSTRING_INDEX(
+          GROUP_CONCAT(CASE WHEN l.event_type = 'signout' THEN ${locationSql} END ORDER BY l.created_date DESC, l.log_id DESC SEPARATOR '||'),
+          '||',
+          1
+        ) AS sign_out_location
+      FROM ${DB_PREFIX}user_location_logs l
+      WHERE ${where.join(" AND ")}
+      GROUP BY DATE(l.created_date)
+    `;
+
+    const [countRows, summaryRows, attendanceRows] = await Promise.all([
+      query(`SELECT COUNT(*) AS total FROM (${dailySql}) daily`, values),
+      query(
+        `
+          SELECT
+            COUNT(*) AS total_days,
+            COALESCE(SUM(CASE WHEN daily.sign_in_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS present_days,
+            COALESCE(SUM(CASE WHEN daily.sign_in_at IS NOT NULL AND daily.sign_out_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS completed_days,
+            COALESCE(SUM(CASE WHEN daily.sign_in_at IS NOT NULL AND daily.sign_out_at IS NULL THEN 1 ELSE 0 END), 0) AS missing_sign_out,
+            COALESCE(SUM(CASE
+              WHEN daily.sign_in_at IS NOT NULL AND daily.sign_out_at IS NOT NULL
+                THEN GREATEST(TIMESTAMPDIFF(SECOND, daily.sign_in_at, daily.sign_out_at), 0)
+              ELSE 0
+            END), 0) AS total_work_seconds,
+            COALESCE(ROUND(AVG(CASE
+              WHEN daily.sign_in_at IS NOT NULL AND daily.sign_out_at IS NOT NULL
+                THEN GREATEST(TIMESTAMPDIFF(SECOND, daily.sign_in_at, daily.sign_out_at), 0)
+            END)), 0) AS average_work_seconds
+          FROM (${dailySql}) daily
+        `,
+        values
+      ),
+      query(
+        `
+          SELECT
+            daily.*,
+            CASE
+              WHEN daily.sign_in_at IS NOT NULL AND daily.sign_out_at IS NOT NULL THEN 'Complete'
+              WHEN daily.sign_in_at IS NOT NULL THEN 'Missing Sign Out'
+              ELSE 'Missing Sign In'
+            END AS attendance_status,
+            CASE
+              WHEN daily.sign_in_at IS NOT NULL AND daily.sign_out_at IS NOT NULL
+                THEN GREATEST(TIMESTAMPDIFF(SECOND, daily.sign_in_at, daily.sign_out_at), 0)
+              ELSE NULL
+            END AS work_seconds
+          FROM (${dailySql}) daily
+          ORDER BY daily.attendance_date DESC
+          LIMIT ${safeLimit} OFFSET ${offset}
+        `,
+        values
+      ),
+    ]);
+
+    const total = Number(countRows[0]?.total || 0);
+
+    return successResponse(res, {
+      code: 1004,
+      httpStatus: 200,
+      data: {
+        data: {
+          user: userRows[0],
+          company: {
+            company_id: userRows[0].company_id,
+            company_name: userRows[0].company_name,
+          },
+          summary: summaryRows[0] || {},
+          attendance: attendanceRows,
+          filters: {
+            user_id: String(userId),
+            company_id: String(companyId || ""),
+            from_date: body.from_date || "",
+            to_date: body.to_date || "",
+          },
+          pagination: {
+            page: currentPage,
+            limit: safeLimit,
+            total,
+            totalPages: Math.ceil(total / safeLimit),
+            start: total === 0 ? 0 : offset + 1,
+            end: Math.min(offset + safeLimit, total),
+          },
+        },
+      },
+    });
+  } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
 const escapeHtml = (value = "") =>
   String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -993,7 +1377,6 @@ export const exportCustomerReportExcel = async (req, res) => {
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };
-
 export const exportUserPerformanceExcel = async (req, res) => {
   try {
     const body = req.body || {};
@@ -1014,6 +1397,30 @@ export const exportUserPerformanceExcel = async (req, res) => {
   } catch (error) {
     console.log("error : ", error);
 
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+export const exportCustomerwiseReportExcel = async (req, res) => {
+  try {
+    const body = req.body || {};
+    const companyId = !isSuperAdmin(req.user)
+      ? req.user.company_id
+      : body.company_id;
+
+    if (!companyId) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Company is required.",
+      });
+    }
+    const {company, customers, filters, summary} = await getCustomerwiseTickets({ companyId, body, isExport: true, });
+    console.log({company, customers, filters, summary});
+    const attachment = await buildCustomerWiseExcelAttachment({ company, customers, filters, summary });
+    return sendExcelDownload(res, attachment);
+  } catch (error) {
+    console.log(error);
+    
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };
