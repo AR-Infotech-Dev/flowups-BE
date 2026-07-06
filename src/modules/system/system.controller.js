@@ -1,7 +1,7 @@
 import * as CommonModel from "#shared/models/common.model.js";
 import { query, DB_PREFIX } from "#config/database.js";
 import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
-import { getSummary } from "#modules/reports/reports.controller.js";
+import { getSummary } from "#modules/reports/performance-report/performance-report.controller.js";
 import { isSuperAdminRole as isSuperAdmin } from "#shared/utils/role.utils.js";
 
 // ======================================================

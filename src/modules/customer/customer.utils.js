@@ -151,6 +151,34 @@ export const normalizeCustomerContacts = (value) => {
     .filter((item) => item.name || item.designation || item.mobile_no || item.email || item.department);
 };
 
+export const validateCustomerContacts = (contacts = [], { requirePrimary = true } = {}) => {
+  if (!contacts.length) {
+    return { isValid: false, message: "At least one contact person is required" };
+  }
+
+  const invalidContact = contacts.find((contact) => !contact.name || !contact.mobile_no);
+  if (invalidContact) {
+    return { isValid: false, message: "Contact name and mobile number are required" };
+  }
+
+  const invalidMobile = contacts.find((contact) => !/^[0-9]\d{9}$/.test(String(contact.mobile_no || "")));
+  if (invalidMobile) {
+    return { isValid: false, message: `Contact mobile number ${invalidMobile.mobile_no || ""} must be a valid 10-digit number` };
+  }
+
+  const invalidEmail = contacts.find((contact) => contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(contact.email).trim()));
+  if (invalidEmail) {
+    return { isValid: false, message: `Contact email ${invalidEmail.email} must be a valid email` };
+  }
+
+  const primaryCount = contacts.filter((contact) => contact.is_primary === "y").length;
+  if (primaryCount > 1 || (requirePrimary && primaryCount !== 1)) {
+    return { isValid: false, message: "One primary contact is required" };
+  }
+
+  return { isValid: true };
+};
+
 const normalizeHeader = (value = "") =>
   String(value || "")
     .toLowerCase()
@@ -169,14 +197,14 @@ export const getCellValue = (value) => {
   return String(value).trim();
 };
 
-const normalizeYesNo = (value) => {
+export const normalizeYesNo = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
   if (["yes", "y", "1", "true", "amc"].includes(normalized)) return "yes";
   if (["no", "n", "0", "false", "non amc", "non-amc"].includes(normalized)) return "no";
   return normalized || "no";
 };
 
-const normalizeTermPeriod = (value) => {
+export const normalizeTermPeriod = (value) => {
   const normalized = String(value || "").trim().toLowerCase().replace(/\s+/g, "_");
   if (["4", "4_month", "4month", "4_months"].includes(normalized)) return "4_month";
   if (["6", "6_month", "6month", "6_months"].includes(normalized)) return "6_month";
@@ -184,7 +212,7 @@ const normalizeTermPeriod = (value) => {
   return normalized || null;
 };
 
-const normalizeImportDate = (value) => {
+export const normalizeImportDate = (value) => {
   if (!value) return null;
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().split("T")[0];

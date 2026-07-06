@@ -1,5 +1,6 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import { isSuperAdminRole } from "#shared/utils/role.utils.js";
+import { buildReportPagination, getReportPagination } from "../report.utils.js";
 import { formatDate, getDaysLeft, getExpiryStatus, getSortValue, parseJsonArray, toDateOnly } from "./product-expiry-report.utils.js";
 
 const DEFAULT_EXPIRING_DAYS = 30;
@@ -209,20 +210,22 @@ export const getProductExpiryReport = async ({ body = {}, user = {} } = {}) => {
   const filteredRows = applyFilters(rows, { ...body, expiring_days: expiringDays });
   const summary = buildSummary(filteredRows);
   const sortedRows = sortRows(filteredRows, orderBy, order);
-  const numericPage = Math.max(Number(page) || 1, 1);
-  const numericLimit = Math.max(Number(limit) || 20, 1);
-  const start = (numericPage - 1) * numericLimit;
+  const { page: numericPage, limit: numericLimit, offset: start } = getReportPagination({
+    page,
+    limit,
+    maxLimit: Number.MAX_SAFE_INTEGER,
+  });
   const data = sortedRows.slice(start, start + numericLimit);
 
   return {
     data,
     summary,
-    pagination: {
-      total: filteredRows.length,
+    pagination: buildReportPagination({
       page: numericPage,
       limit: numericLimit,
-      totalPages: Math.ceil(filteredRows.length / numericLimit),
-    },
+      offset: start,
+      total: filteredRows.length,
+    }),
     filters: {
       searchText: body.searchText || "",
       company_id: body.company_id || "",

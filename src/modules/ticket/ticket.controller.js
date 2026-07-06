@@ -38,7 +38,7 @@ import { ticketValidationRules } from "./ticket.validation.js";
 
 export const list = async (req, res) => {
   try {
-    const { viewAll, client_id = null, page = 1, searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
+    const { viewAll, client_id = null, page = 1, order_by = "ticket_id", order = "DESC", searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
     const limit = env.perPage || 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
@@ -49,7 +49,7 @@ export const list = async (req, res) => {
     const filterData = prepareFilterData({
       filters: effectiveFilters,
       searchText,
-      other: { orderBy: "ticket_id", order: "DESC", searchColumns: TICKET_SEARCH_COLUMNS },
+      other: { orderBy: order_by, order: order, searchColumns: TICKET_SEARCH_COLUMNS },
       default_columns: defaultColumns,
       custom_columns: customColumns,
     });
