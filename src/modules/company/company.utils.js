@@ -142,9 +142,12 @@ export const dumpTable = ({ table, where, outputFile }) => new Promise((resolve,
         `-P${env.DB_PORT || 3306}`,
         `-u${env.DB_USER}`,
         `-p${env.DB_PASSWORD}`,
+
         "--single-transaction",
         "--skip-lock-tables",
-        // "--no-create-info",
+        "--no-tablespaces",
+        "--set-gtid-purged=OFF",
+
         env.DB_NAME,
         `${env.DB_PREFIX}${table}`,
     ];
