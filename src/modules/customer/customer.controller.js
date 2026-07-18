@@ -3,10 +3,11 @@ import { successResponse, failureResponse } from "#shared/utils/apiResponse.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { validateBody } from "#shared/utils/bodyValidator.js";
-import { CUSTOMER_EXCEL_COLUMNS, CUSTOMER_IMPORT_COLUMNS, CUSTOMER_PRODUCT_EXCEL_COLUMNS, CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
+import { CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
 import { customColumns, defaultColumns } from "./customer.filter.js";
 import { customerValidationRules } from "./customer.validation.js";
 import {
+  changeCustomersStatus,
   createCustomer,
   deleteCustomers,
   findCustomerProductSerialConflicts,
@@ -29,11 +30,13 @@ import {
   rowLooksEmpty,
   rowLooksLikeSampleRow,
   rowLooksLikeTemplateKeyRow,
+  validateCustomerContacts,
 } from "./customer.utils.js";
 import * as XLSX from "xlsx";
-import { renderTemplate } from "#shared/utils/templateMaker.js";
-import { buildSheetSpacerRow, excelFormat, sendExcelDownload } from "#shared/utils/excel.utils.js";
 import { env } from "#config/env.js";
+import { buildCustomerWorkbook, isCustomerWorkbook } from "./customer-workbook.utils.js";
+import { buildCustomerExportWorkbook, importCustomerWorkbook } from "./customer-workbook.service.js";
+import { syncToTenant } from "#shared/utils/tenantSync.js";
 
 const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } = {}) => {
   const normalizedName = String(name || "").trim().toLowerCase();
@@ -89,105 +92,6 @@ const validateCustomerProductSerials = async ({ products = [], excludeCustomerId
   }
 
   return { isValid: true };
-};
-
-const validateCustomerImportContacts = (contacts = []) => {
-  if (!contacts.length) {
-    return { isValid: false, message: "At least one contact person is required" };
-  }
-
-  const invalidContact = contacts.find((contact) => !contact.name || !contact.mobile_no);
-  if (invalidContact) {
-    return { isValid: false, message: "Contact name and mobile number are required" };
-  }
-
-  const invalidMobile = contacts.find((contact) => !/^[0-9]\d{9}$/.test(String(contact.mobile_no || "")));
-  if (invalidMobile) {
-    return { isValid: false, message: `Contact mobile number ${invalidMobile.mobile_no || ""} must be a valid 10-digit number` };
-  }
-
-  const invalidEmail = contacts.find((contact) => contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(contact.email).trim()));
-  if (invalidEmail) {
-    return { isValid: false, message: `Contact email ${invalidEmail.email} must be a valid email` };
-  }
-
-  const primaryCount = contacts.filter((contact) => contact.is_primary === "y").length;
-  if (primaryCount !== 1) {
-    return { isValid: false, message: "One primary contact is required" };
-  }
-
-  return { isValid: true };
-};
-
-const normalizeSkipColumns = (value = []) => {
-  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-};
-
-const normalizeSelectedColumns = (value = []) => normalizeSkipColumns(value);
-
-const getExportColumns = ({ selectedColumns = [], skipColumns = [] } = {}) => {
-  const skipSet = new Set(normalizeSkipColumns(skipColumns).map((item) => item.toLowerCase()));
-  const selectedList = normalizeSelectedColumns(selectedColumns).map((item) => item.toLowerCase());
-  const allColumns = [...CUSTOMER_EXCEL_COLUMNS, ...CUSTOMER_PRODUCT_EXCEL_COLUMNS];
-  const productKeys = new Set(["customer_products", "products"]);
-
-  const filterSkipped = (columns = []) => columns.filter((column) => {
-    if (column.skip === true) return false;
-    return !skipSet.has(String(column.key || "").toLowerCase()) && !skipSet.has(String(column.header || "").toLowerCase());
-  });
-
-  if (selectedList.length) {
-    const columnsByKey = new Map(allColumns.map((column) => [String(column.key || "").toLowerCase(), column]));
-    const columnsByHeader = new Map(allColumns.map((column) => [String(column.header || "").toLowerCase(), column]));
-    const selectedExportColumns = [];
-
-    selectedList.forEach((key) => {
-      if (productKeys.has(key)) {
-        selectedExportColumns.push(...CUSTOMER_PRODUCT_EXCEL_COLUMNS);
-        return;
-      }
-
-      const column = columnsByKey.get(key) || columnsByHeader.get(key);
-      if (column) selectedExportColumns.push(column);
-    });
-
-    return filterSkipped([...new Map(selectedExportColumns.map((column) => [column.key, column])).values()]);
-  }
-
-  return filterSkipped(allColumns);
-};
-
-const joinProductValues = (products = [], field = "") => {
-  if (!products.length) return "-";
-
-  const values = products.map((product) => {
-    const value = product?.[field];
-    if (Array.isArray(value)) return value.filter(Boolean).join("+") || "-";
-    return value === null || value === undefined || value === "" ? "-" : value;
-  });
-
-  return values.join(",");
-};
-
-const buildCustomerExportRow = (customer = {}) => {
-  const products = normalizeCustomerProducts(customer.customer_products);
-
-  return {
-    ...customer,
-    product_ids: joinProductValues(products, "product_id"),
-    product_names: joinProductValues(products, "product_name"),
-    serial_numbers: joinProductValues(products, "serial_number"),
-    product_expiry_dates: joinProductValues(products, "expiry_date"),
-    product_add_ons: joinProductValues(products, "add_ons"),
-  };
 };
 
 // ======================================================
@@ -434,8 +338,10 @@ export const changeStatus = async (req, res) => {
         message: "ids are required",
       });
     }
-
-    await deleteCustomers(ids);
+    //  FOR SOFT DELETE
+    await changeCustomersStatus(ids);
+    // FOR HARDCORE DELETE 
+    // await deleteCustomers(ids);
 
     return successResponse(res, {
       code: 1003,
@@ -456,26 +362,7 @@ export const changeStatus = async (req, res) => {
 // ======================================================
 export const downloadImportTemplate = async (req, res) => {
   try {
-    const headerRow = CUSTOMER_IMPORT_COLUMNS.map((column) => `${column.label}${column.required ? " *" : ""}`);
-    const keyRow = CUSTOMER_IMPORT_COLUMNS.map((column) => column.key);
-    const sampleRow = CUSTOMER_IMPORT_COLUMNS.map((column) => column.sample || "");
-    const sheet = XLSX.utils.aoa_to_sheet([
-      ["Customer Import Template"],
-      ["Required columns are marked with *. Keep the header row unchanged."],
-      headerRow,
-      keyRow,
-      sampleRow,
-    ]);
-
-    sheet["!cols"] = CUSTOMER_IMPORT_COLUMNS.map(() => ({ wch: 22 }));
-    sheet["!merges"] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: CUSTOMER_IMPORT_COLUMNS.length - 1 } },
-      { s: { r: 1, c: 0 }, e: { r: 1, c: CUSTOMER_IMPORT_COLUMNS.length - 1 } },
-    ];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, sheet, "Customers");
-    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const buffer = buildCustomerWorkbook({ template: true });
 
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     res.setHeader("Content-Disposition", "attachment; filename=customer-import-template.xlsx");
@@ -502,6 +389,27 @@ export const importCustomers = async (req, res) => {
     }
 
     const workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
+    if (isCustomerWorkbook(workbook)) {
+      const dryRun = String(req.body?.mode || "commit").toLowerCase() === "preview";
+      const importTask = () => importCustomerWorkbook({ workbook, user: req.user, dryRun });
+      const result = req.own_db_enabled === "yes"
+        ? await syncToTenant(req.user.company_id, importTask)
+        : await importTask();
+      return successResponse(res, {
+        code: dryRun ? 1004 : 1001,
+        httpStatus: 200,
+        message: dryRun ? "Import preview generated." : (result.inserted || result.updated ? "Customer workbook imported successfully." : "No customer changes imported."),
+        data: result,
+      });
+    }
+    if (String(req.body?.mode || "commit").toLowerCase() === "preview") {
+      return successResponse(res, {
+        code: 1004,
+        httpStatus: 200,
+        message: "Legacy single-sheet file detected. Apply Changes will use the legacy insert-only import.",
+        data: { inserted: 0, updated: 0, unchanged: 0, skipped: 0, errors: [], preview: true, legacy: true },
+      });
+    }
     const sheetName = workbook.SheetNames?.[0];
     const sheet = sheetName ? workbook.Sheets[sheetName] : null;
 
@@ -555,7 +463,7 @@ export const importCustomers = async (req, res) => {
 
       const payload = buildCustomerPayloadFromImport(rowData, req.user);
       const contacts = normalizeCustomerContacts(payload.customer_contacts);
-      const contactValidation = validateCustomerImportContacts(contacts);
+      const contactValidation = validateCustomerContacts(contacts);
       if (!contactValidation.isValid) {
         skipped += 1;
         errors.push({ row: rowNumber, message: contactValidation.message });
@@ -663,7 +571,7 @@ export const importCustomers = async (req, res) => {
 export const downloadExcel = async (req, res) => {
   try {
     const payload = req.method === "GET" ? req.query : req.body;
-    const { searchText = "", order_by = "created_date", order = "DESC", filters = [], selectedColumns = [], visibleColumns = [], skipColumns = [], excludeColumns = [], } = payload || {};
+    const { searchText = "", order_by = "created_date", order = "DESC", filters = [], selectedColumns = [], visibleColumns = [] } = payload || {};
     const filterData = prepareFilterData({
       filters,
       searchText,
@@ -686,32 +594,12 @@ export const downloadExcel = async (req, res) => {
       values.push(req.user.company_id);
     }
 
-    const customerDetails = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other, });
-    const rows = customerDetails.map(buildCustomerExportRow);
-    const headers = getExportColumns({
-      selectedColumns: normalizeSelectedColumns(selectedColumns).length ? selectedColumns : visibleColumns,
-      skipColumns: [...normalizeSkipColumns(skipColumns), ...normalizeSkipColumns(excludeColumns)],
-    });
-    const spreadsheetColumnCount = headers.length || 1;
-
-    const htmlBody = await renderTemplate(
-      "customerExport",
-      "excel",
-      {
-        spreadsheetColumnCount,
-        exportTitle: "Customers",
-        spacerRow: await buildSheetSpacerRow(18, spreadsheetColumnCount),
-        headers,
-        rows,
-      }
-    );
-    const excelAttachment = {
-      filename: "Customer-Export.xls",
-      content: await excelFormat(htmlBody),
-      contentType: "application/vnd.ms-excel",
-    };
-
-    return sendExcelDownload(res, excelAttachment);
+    const customerDetails = await CommonModel.GetMasterListDetails({ select: `${select}, t.company_id AS source_company_id`, table: MODULE_TABLE, where, values, join, other, });
+    const exportColumns = Array.isArray(selectedColumns) && selectedColumns.length ? selectedColumns : visibleColumns;
+    const buffer = await buildCustomerExportWorkbook(customerDetails, Array.isArray(exportColumns) ? exportColumns : []);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=Customer-Export.xlsx");
+    return res.send(buffer);
   } catch (error) {
     return failureResponse(res, {
       code: 2008,
@@ -720,3 +608,4 @@ export const downloadExcel = async (req, res) => {
     });
   }
 };
+

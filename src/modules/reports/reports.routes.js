@@ -1,16 +1,34 @@
 import express from "express";
-import * as reportsController from "./reports.controller.js";
 import { requirePermission } from "#middlewares/permissions.middleware.js";
+import attendanceReportRoutes from "./attendance-report/attendance-report.routes.js";
+import * as CustomerReportController from "./customer-report/customer-report.controller.js";
+import customerReportRoutes from "./customer-report/customer-report.routes.js";
+import * as CustomerWiseReportController from "./customer-wise-report/customer-wise-report.controller.js";
+import customerWiseReportRoutes from "./customer-wise-report/customer-wise-report.routes.js";
+import performanceReportRoutes from "./performance-report/performance-report.routes.js";
 import productExpiryReportRoutes from "./product-expiry-report/product-expiry-report.routes.js";
+import workReportRoutes from "./work-report/work-report.routes.js";
+import { tenantDbMiddleware } from "#middlewares/ownDB.middleware.js";
 
 const reportsRoutes = express.Router();
 
-reportsRoutes.post("/user-performance", requirePermission(["reports/performance"], "view"),  reportsController.userPerformance);
-reportsRoutes.post("/user-performance/export-excel", requirePermission(["reports/performance"], "view"),  reportsController.exportUserPerformanceExcel);
-reportsRoutes.post("/work-report", requirePermission(["/work-report"], "view"),  reportsController.workReport);
-reportsRoutes.post("/customer", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"),  reportsController.customerReport );
-reportsRoutes.post("/customer/export-excel", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"),  reportsController.exportCustomerReportExcel );
-reportsRoutes.post("/sendReport", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"),  reportsController.sendReport );
-reportsRoutes.use("/product-expiry", productExpiryReportRoutes);
+// USERS
+reportsRoutes.use("/user-performance", tenantDbMiddleware, performanceReportRoutes);
+reportsRoutes.use("/work-report", tenantDbMiddleware, workReportRoutes);
+reportsRoutes.use("/attendance", tenantDbMiddleware, attendanceReportRoutes);
+
+// CUSTOMER
+// customer report
+reportsRoutes.use("/customer", tenantDbMiddleware, customerReportRoutes);
+// customer report send
+reportsRoutes.post("/sendReport", requirePermission(["customers", "/reports/customer"], "view"), tenantDbMiddleware, CustomerReportController.sendReport);
+
+// customer-wise-ticket-report
+reportsRoutes.use("/customer-wise", tenantDbMiddleware, customerWiseReportRoutes);
+// customer-wise-ticket-report excel export
+reportsRoutes.post("/customer-wise-report-excel", requirePermission(["customers", "/reports/customer"], "view"), tenantDbMiddleware, CustomerWiseReportController.exportExcel);
+
+// PRODUCTS
+reportsRoutes.use("/product-expiry", tenantDbMiddleware, productExpiryReportRoutes);
 
 export default reportsRoutes;

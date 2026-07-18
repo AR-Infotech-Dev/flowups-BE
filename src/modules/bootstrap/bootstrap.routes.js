@@ -6,6 +6,7 @@ import { verifyToken } from "#middlewares/auth.middleware.js"
 
 const bootstrapRouter = express.Router();
 bootstrapRouter.get("/get-permissions/:id", getModulesAccess);
+bootstrapRouter.post("/get-permissions/:id", getModulesAccess);
 bootstrapRouter.post("/get-menus", menulist);
 bootstrapRouter.post("/get-users", verifyToken, listNoAuth);
 export default bootstrapRouter;

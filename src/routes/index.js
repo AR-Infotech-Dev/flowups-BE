@@ -17,29 +17,31 @@ import dashboardRoutes from "#modules/dashboard/dashboard.routes.js";
 import bootstrapRoutes from "#modules/bootstrap/bootstrap.routes.js";
 import amcReminderRoutes from "#modules/amc-reminders/amc-reminder.routes.js";
 import reportsRoutes from "#modules/reports/reports.routes.js";
+import subscriptionRoutes from "#modules/subscriptions/subscriptions.routes.js";
 import * as ticketVisitsController from "#modules/ticket/ticket-visits.controller.js";
 
-import {verifyToken} from "#middlewares/auth.middleware.js"
+import { verifyToken } from "#middlewares/auth.middleware.js"
 
 const router = express.Router();
 
 router.use('/', loginRoutes);
-router.use('/',feedbackRoutes);
-router.use('/',bootstrapRoutes);
+router.use('/', feedbackRoutes);
+router.use('/', bootstrapRoutes);
 router.post('/tickets/visits/customer-confirm', ticketVisitsController.customerConfirmVisit);
-router.use('/',verifyToken, commentsRoutes);
-router.use('/users',verifyToken, usersRoutes);
-router.use('/system',verifyToken, systemRoutes);
-router.use('/menus',verifyToken, menuRoutes);
-router.use('/categories',verifyToken, categoryRoutes);
-router.use('/customers',verifyToken, customerRoutes);
-router.use('/companies',verifyToken, companyRoutes);
-router.use('/products',verifyToken, productRoutes);
-router.use('/tickets',verifyToken, ticketRoutes);
+router.use('/', verifyToken, commentsRoutes);
+router.use('/users', verifyToken, usersRoutes);
+router.use('/system', verifyToken, systemRoutes);
+router.use('/menus', verifyToken, menuRoutes);
+router.use('/categories', verifyToken, categoryRoutes);
+router.use('/customers', verifyToken, customerRoutes);
+router.use('/companies', verifyToken, companyRoutes);
+router.use('/products', verifyToken, productRoutes);
+router.use('/tickets', verifyToken, ticketRoutes);
 router.use('/amc-reminders', verifyToken, amcReminderRoutes);
 router.use('/reports', verifyToken, reportsRoutes);
-router.use('/permissions',verifyToken, moduleAccessRoutes);
-router.use("/notifications", verifyToken,notificationRoutes);
+router.use("/subscriptions", verifyToken, subscriptionRoutes);
+router.use('/permissions', verifyToken, moduleAccessRoutes);
+router.use("/notifications", verifyToken, notificationRoutes);
 router.use("/dashboard", verifyToken, dashboardRoutes);
 
 

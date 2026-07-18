@@ -1,12 +1,8 @@
-# MySQL Ticket Management Triggers
-## 1. trg_ticket_after_insert.sql
-
 DROP TRIGGER IF EXISTS trg_ticket_after_insert;
 
 DELIMITER $$
 
-CREATE DEFINER=`root`@`localhost`
-TRIGGER `trg_ticket_after_insert`
+CREATE TRIGGER `trg_ticket_after_insert`
 AFTER INSERT ON `ab_tickets`
 FOR EACH ROW
 BEGIN
@@ -76,10 +72,6 @@ END$$
 
 DELIMITER ;
 
----
-
-## 2. ab_tickets_notification_after_insert.sql
-
 DROP TRIGGER IF EXISTS ab_tickets_notification_after_insert;
 
 DELIMITER $$
@@ -134,10 +126,6 @@ END$$
 
 DELIMITER ;
 
-
----
-
-## 3. ab_tickets_AFTER_UPDATE.sql
 
 DROP TRIGGER IF EXISTS ab_tickets_AFTER_UPDATE;
 
@@ -241,10 +229,6 @@ BEGIN
 END$$
 
 DELIMITER ;
-
----
-
-## 4. trg_ab_tickets_after_update.sql
 
 DROP TRIGGER IF EXISTS trg_ab_tickets_after_update;
 

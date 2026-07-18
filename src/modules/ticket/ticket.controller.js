@@ -19,6 +19,7 @@ import {
   getTicketAssigneeStatusSnapshot,
   getTicketById,
   getTicketRecord,
+  getTicketVisibilityRows,
   listTickets,
   setTicketFeedbackToken,
   updateTicket,
@@ -26,7 +27,6 @@ import {
 import {
   emitNotification,
   getAssigneeHistoryExistsSql,
-  getTicketVisibilitySelect,
   isAdmin,
   isSuperAdmin,
   prepareTicketBody,
@@ -38,7 +38,7 @@ import { ticketValidationRules } from "./ticket.validation.js";
 
 export const list = async (req, res) => {
   try {
-    const { viewAll, client_id = null, page = 1, searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
+    const { viewAll, client_id = null, page = 1, order_by = "ticket_id", order = "DESC", searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
     const limit = env.perPage || 10;
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
@@ -49,12 +49,11 @@ export const list = async (req, res) => {
     const filterData = prepareFilterData({
       filters: effectiveFilters,
       searchText,
-      other: { orderBy: "ticket_id", order: "DESC", searchColumns: TICKET_SEARCH_COLUMNS },
+      other: { orderBy: order_by, order: order, searchColumns: TICKET_SEARCH_COLUMNS },
       default_columns: defaultColumns,
       custom_columns: customColumns,
     });
     const { select, where, values, join, other } = filterData;
-    const visibilitySelect = getTicketVisibilitySelect(userId);
 
     if (client_id) {
       where.push("t.client_id = ?");
@@ -65,7 +64,9 @@ export const list = async (req, res) => {
       values.push(ticket_status);
     }
 
-    if (!isSuperAdmin(req.user) && req.user.company_id) {
+
+
+    if (req.own_db_enabled == "no" && !isSuperAdmin(req.user) && req.user.company_id) {
       where.push("t.company_id = ?");
       values.push(req.user.company_id);
     }
@@ -78,16 +79,35 @@ export const list = async (req, res) => {
     const shouldFilterByAssignee = !isSuperAdmin(req.user) && !(isAdmin(req.user) && (viewAll === "Y" || getAll === "Y")) && userId;
     if (shouldFilterByAssignee) {
       where.push(`(t.assignee = ? OR t.created_by = ? OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")})`);
-      values.push(userId, userId, userId, userId, userId);
+      values.push(userId, userId, String(userId), String(userId), userId);
     }
-
-    const total = await countTickets({ where, values, join, other });
+    const needsJoinedCount = Boolean(searchText) || effectiveFilters.some((filter) => ['ticket_priority', 'ticket_status', 'query_type', 'assignee', 'client_id', 'company_id', 'modified_by', 'created_by'].includes(filter?.field));
+    const total = await countTickets({ where, values, join: needsJoinedCount ? join : [], other });
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
-
     const rows = getAll === "Y"
-      ? await listTickets({ select: `${select}${visibilitySelect}`, where, values, join, other })
-      : await listTickets({ select: `${select}${visibilitySelect}`, where, values, join, other, limit, start });
+      ? await listTickets({ select, where, values, join, other })
+      : await listTickets({ select, where, values, join, other, limit, start });
+
+    if (shouldFilterByAssignee && rows.length) {
+      const historyRows = await getTicketVisibilityRows(rows.map((row) => row.ticket_id), userId);
+      const historyByTicket = new Map();
+      historyRows.forEach((history) => {
+        const list = historyByTicket.get(history.ticket_id) || [];
+        list.push(history);
+        historyByTicket.set(history.ticket_id, list);
+      });
+
+      rows.forEach((row) => {
+        const ticketHistory = historyByTicket.get(row.ticket_id) || [];
+        const delegated = ticketHistory.some((history) => Number(history.new_value || 0) === userId);
+        const reassigned = ticketHistory.some((history) => Number(history.old_value || 0) === userId || Number(history.changed_by || 0) === userId);
+        row.delegation_flag = delegated ? "delegated" : reassigned ? "reassigned" : "";
+        row.is_delegated = delegated ? "Y" : "N";
+        row.is_reassigned = reassigned ? "Y" : "N";
+        row.visibility_reason = Number(row.created_by || 0) === userId ? "created" : Number(row.assignee || 0) === userId ? "assigned" : delegated ? "delegated" : reassigned ? "reassigned" : "company";
+      });
+    }
 
     return successResponse(res, {
       code: 1004,
@@ -105,6 +125,8 @@ export const list = async (req, res) => {
       },
     });
   } catch (error) {
+    console.log('error :', error);
+
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };
@@ -339,3 +361,11 @@ const closeTicketWithFeedback = async (ticket_id, modifiedById, ticketNo = "") =
 
   await sendEmailToClient(ticket_id, "Ticket is Closed !", "We would like to inform you that your support ticket has been closed.", feedbackUrl);
 };
+
+
+
+
+
+
+
+

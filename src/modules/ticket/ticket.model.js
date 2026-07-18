@@ -30,6 +30,27 @@ export const countTickets = ({ where, values, join, other }) => CommonModel.getC
 
 export const listTickets = ({ select, where, values, join, other, limit, start }) => CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, limit, start, join, other });
 
+
+export const getTicketVisibilityRows = async (ticketIds = [], userId = 0) => {
+  const ids = ticketIds.map((id) => Number(id || 0)).filter(Boolean);
+  const safeUserId = Number(userId || 0);
+
+  if (!ids.length || !safeUserId) {
+    return [];
+  }
+
+  const placeholders = ids.map(() => "?").join(",");
+  const sql = `
+    SELECT ticket_id, new_value, old_value, changed_by
+    FROM ${DB_PREFIX}ticket_history
+    WHERE ticket_id IN (${placeholders})
+      AND field_name = 'assignee'
+      AND action_type = 'reassigned'
+      AND (new_value = ? OR old_value = ? OR changed_by = ?)
+  `;
+
+  return await query(sql, [...ids, String(safeUserId), String(safeUserId), safeUserId]);
+};
 export const getTicketNotificationDetails = async (ticketId) => {
   const filterData = prepareFilterData({ default_columns: defaultColumns, custom_columns: customColumns });
   const { where, values, join, other } = filterData;
@@ -85,3 +106,5 @@ export const getLastTicketNoByPattern = async ({ prefix, company_id, resetKey, p
 
   return rows?.[0]?.ticket_no || null;
 };
+
+

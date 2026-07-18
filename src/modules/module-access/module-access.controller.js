@@ -20,7 +20,7 @@ const menuValidationRules = {
 export const getModulesAccess = async (req, res) => {
   try {
     const { id: user_id = null } = req.params;
-    const { company_id = "" } = req.query;
+    const { company_id = "" } = { ...req.query, ...req.body };
 
     if (!user_id) {
       return failureResponse(res, {
