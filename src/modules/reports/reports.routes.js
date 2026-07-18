@@ -8,27 +8,27 @@ import customerWiseReportRoutes from "./customer-wise-report/customer-wise-repor
 import performanceReportRoutes from "./performance-report/performance-report.routes.js";
 import productExpiryReportRoutes from "./product-expiry-report/product-expiry-report.routes.js";
 import workReportRoutes from "./work-report/work-report.routes.js";
+import { tenantDbMiddleware } from "#middlewares/ownDB.middleware.js";
 
 const reportsRoutes = express.Router();
 
 // USERS
-reportsRoutes.use("/user-performance", performanceReportRoutes);
-reportsRoutes.use("/work-report", workReportRoutes);
-reportsRoutes.use("/attendance", attendanceReportRoutes);
+reportsRoutes.use("/user-performance", tenantDbMiddleware, performanceReportRoutes);
+reportsRoutes.use("/work-report", tenantDbMiddleware, workReportRoutes);
+reportsRoutes.use("/attendance", tenantDbMiddleware, attendanceReportRoutes);
 
 // CUSTOMER
 // customer report
-reportsRoutes.use("/customer", customerReportRoutes);
+reportsRoutes.use("/customer", tenantDbMiddleware, customerReportRoutes);
 // customer report send
-reportsRoutes.post("/sendReport", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"), CustomerReportController.sendReport);
+reportsRoutes.post("/sendReport", requirePermission(["customers", "/reports/customer"], "view"), tenantDbMiddleware, CustomerReportController.sendReport);
 
 // customer-wise-ticket-report
-reportsRoutes.use("/customer-wise", customerWiseReportRoutes);
+reportsRoutes.use("/customer-wise", tenantDbMiddleware, customerWiseReportRoutes);
 // customer-wise-ticket-report excel export
-reportsRoutes.post("/customer-wise-report-excel", requirePermission(["customers", "/customers", "reports", "/reports/customer"], "view"), CustomerWiseReportController.exportExcel);
-
+reportsRoutes.post("/customer-wise-report-excel", requirePermission(["customers", "/reports/customer"], "view"), tenantDbMiddleware, CustomerWiseReportController.exportExcel);
 
 // PRODUCTS
-reportsRoutes.use("/product-expiry", productExpiryReportRoutes);
+reportsRoutes.use("/product-expiry", tenantDbMiddleware, productExpiryReportRoutes);
 
 export default reportsRoutes;

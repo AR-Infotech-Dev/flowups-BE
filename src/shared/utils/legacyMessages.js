@@ -26,7 +26,8 @@ export const successMessages = {
   1003: "Deleted successfully",
   1004: "Fetched successfully",
   1005: "Login successful",
-  1006: "Logout successful"
+  1006: "Logout successful",
+  1007: "DB connection Successfull"
 };
 
 // ===============================

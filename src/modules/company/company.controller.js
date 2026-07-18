@@ -4,16 +4,15 @@ import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { validateBody } from "#shared/utils/bodyValidator.js";
 import { clearCompanyMailerCache, testSmtpConnection } from "#shared/utils/email.js";
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+import { COMPANY_LOGO_DIR, companyValidationRules, dbTestValidationRules, dumpTable, ensureCompanyLogoDir, getLogoExtension, mailTestValidationRules, normalizeMailConfig, testCompanyDbConnection } from "./company.utils.js";
 import { env } from "process";
+import path from "node:path";
+import os from "node:os";
+import fs from "fs";
+// TENANT SYNC 
+import { syncToTenant } from "#shared/utils/tenantSync.js";
 
 const MODULE_TABLE = "company_master";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../../public/images/company-logos");
-
 const default_columns = {};
 
 const custom_columns = {
@@ -31,83 +30,6 @@ const custom_columns = {
     key2: "adminID",
     select: "",
   },
-};
-
-const companyValidationRules = {
-  company_id: { label: "Company ID", type: "number" },
-  company_name: { label: "Company Name", required: true },
-  cc_email: { label: "CC Email", type: "email" },
-  sender_email: { label: "Sender Email", type: "email" },
-  sender_name: { label: "Sender Name" },
-  mail_provider: { label: "Mail Provider" },
-  smtp_host: { label: "SMTP Host" },
-  smtp_port: { label: "SMTP Port" },
-  smtp_encryption: { label: "SMTP Encryption" },
-  smtp_username: { label: "SMTP Username" },
-  email_app_password: { label: "App password" },
-  mobile_number: { label: "Mobile Number" },
-  company_address: { label: "Company Address" },
-  country: { label: "Country", },
-  state: { label: "State", },
-  city: { label: "City", },
-  zip: { label: "Zip" },
-  pan: { label: "PAN" },
-  time_format: { label: "Time Format" },
-  date_format: { label: "Date Format" },
-  email_logo: { label: "Email Logo" },
-  created_by: { label: "Created By", type: "number" },
-  modified_by: { label: "Modified By", type: "number" },
-  ticket_prefix: { label: "Ticket Prefix" },
-  ticket_include_year: { label: "Include Year" },
-  ticket_yearly_reset: { label: "Ticket Yearly Reset" },
-  ticket_prefix_padding: { label: "Padding", type: "number" },
-  ticket_no_reset: { label: "Reset Preference" },
-  status: { label: "Status" },
-};
-
-const mailTestValidationRules = {
-  company_id: { label: "Company ID", type: "number" },
-  company_name: { label: "Company Name" },
-  sender_name: { label: "Sender Name", required: true },
-  sender_email: { label: "Sender Email", type: "email", required: true },
-  mail_provider: { label: "Mail Provider", required: true },
-  smtp_host: { label: "SMTP Host" },
-  smtp_port: { label: "SMTP Port" },
-  smtp_encryption: { label: "SMTP Encryption" },
-  smtp_username: { label: "SMTP Username" },
-  email_app_password: { label: "Email App Password", required: true },
-};
-
-const MAIL_PROVIDER_DEFAULTS = {
-  gmail: { smtp_host: "smtp.gmail.com", smtp_port: "587", smtp_encryption: "tls" },
-  yahoo: { smtp_host: "smtp.mail.yahoo.com", smtp_port: "587", smtp_encryption: "tls" },
-  outlook: { smtp_host: "smtp.office365.com", smtp_port: "587", smtp_encryption: "tls" },
-};
-
-const normalizeMailConfig = (data = {}) => {
-  const provider = String(data.mail_provider || "gmail").toLowerCase();
-  const defaults = MAIL_PROVIDER_DEFAULTS[provider] || {};
-
-  return {
-    ...data,
-    mail_provider: provider,
-    smtp_host: data.smtp_host || defaults.smtp_host,
-    smtp_port: data.smtp_port || defaults.smtp_port || "587",
-    smtp_encryption: data.smtp_encryption || defaults.smtp_encryption || "tls",
-    smtp_username: data.smtp_username || data.sender_email,
-  };
-};
-
-const ensureCompanyLogoDir = () => {
-  fs.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
-};
-
-const getLogoExtension = (file = {}) => {
-  const mime = String(file.mimetype || "").toLowerCase();
-  if (mime === "image/png") return ".png";
-  if (mime === "image/webp") return ".webp";
-  if (mime === "image/svg+xml") return ".svg";
-  return ".jpg";
 };
 
 // ======================================================
@@ -250,6 +172,16 @@ export const testMailConfig = async (req, res) => {
           },
           where: { company_id: companyId },
         });
+        await syncToTenant(companyId, async () => {
+          await CommonModel.updateMasterDetails({
+            table: MODULE_TABLE,
+            data: {
+              mail_connection_status: result.success ? "connected" : "failed",
+              mail_last_tested_at: toMysqlDateTime(),
+            },
+            where: { company_id: companyId },
+          });
+        });
       } catch (statusError) {
         console.warn("Unable to update SMTP test status:", statusError.message);
       }
@@ -276,6 +208,75 @@ export const testMailConfig = async (req, res) => {
       },
     });
   } catch (error) {
+    return failureResponse(res, {
+      code: 2008,
+      httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+export const testDBConfig = async (req, res) => {
+  try {
+    const validation = validateBody(req.body, dbTestValidationRules);
+    if (!validation.isValid) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: validation.message,
+      });
+    }
+
+    const data = validation.data;
+    const result = await testCompanyDbConnection(data);
+    const companyId = req.user.company_id || null;
+    
+    if (companyId) {
+      try {
+        await CommonModel.updateMasterDetails({
+          table: MODULE_TABLE,
+          data: {
+            db_status: result.success ? "connected" : "not_connected",
+            db_tested_at: toMysqlDateTime(),
+          },
+          where: { company_id: companyId },
+        });
+        await syncToTenant(companyId, async () => {
+          await CommonModel.updateMasterDetails({
+            table: MODULE_TABLE,
+            data: {
+              db_status: result.success ? "connected" : "not_connected",
+              db_tested_at: toMysqlDateTime(),
+            },
+            where: { company_id: companyId },
+          });
+        });
+      } catch (statusError) {
+        console.warn("Unable to update DB test status:", statusError.message);
+      }
+    }
+
+    if (!result.success) {
+      return failureResponse(res, {
+        code: 2008,
+        httpStatus: 400,
+        message: result.message,
+      });
+    }
+
+    return successResponse(res, {
+      code: 1007,
+      httpStatus: 200,
+      message: result.message,
+      data: {
+        data: {
+          db_status: "connected",
+          db_tested_at: toMysqlDateTime(),
+        },
+      },
+    });
+  } catch (error) {
+    console.log(error);
+
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,
@@ -313,6 +314,18 @@ export const uploadCompanyLogo = async (req, res) => {
           modified_date: toMysqlDateTime(),
         },
         where: { company_id: companyId },
+      });
+
+      await syncToTenant(companyId, async () => {
+        await CommonModel.updateMasterDetails({
+          table: MODULE_TABLE,
+          data: {
+            email_logo: relativePath,
+            modified_by: req.user.adminID,
+            modified_date: toMysqlDateTime(),
+          },
+          where: { company_id: companyId },
+        });
       });
 
       if (!result.affectedRows) {
@@ -381,6 +394,19 @@ export const removeCompanyLogo = async (req, res) => {
       where: { company_id: companyId },
     });
 
+    await syncToTenant(companyId, async () => {
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data: {
+          email_logo: null,
+          modified_by: req.user.adminID,
+          modified_date: toMysqlDateTime(),
+        },
+        where: { company_id: companyId },
+      });
+
+    });
+
     // Clear mail cache
     clearCompanyMailerCache(companyId);
 
@@ -428,6 +454,12 @@ export const getCompanyDetails = async (req, res) => {
           table: MODULE_TABLE,
           data,
         });
+        await syncToTenant(company_id, async () => {
+          await CommonModel.saveMasterDetails({
+            table: MODULE_TABLE,
+            data,
+          });
+        });
         clearCompanyMailerCache(result.insertId);
 
         return successResponse(res, {
@@ -455,18 +487,42 @@ export const getCompanyDetails = async (req, res) => {
             message: validation.message,
           });
         }
-
+        const dataforsync = validation.data;
         const data = validation.data;
+
         delete data.company_id;
         delete data.created_by;
         delete data.created_date;
+
         data.modified_by = req.user.adminID;
         data.modified_date = toMysqlDateTime();
+        dataforsync.modified_by = req.user.adminID;
+        dataforsync.modified_date = toMysqlDateTime();
+        dataforsync.company_id = company_id;
+        console.log('dataforsync : ', dataforsync);
 
         const result = await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
           data,
           where: { company_id },
+        });
+
+        await syncToTenant(company_id, async () => {
+          const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", {
+            company_id,
+          });
+          if (!details.length) {
+            await CommonModel.saveMasterDetails({
+              table: MODULE_TABLE,
+              data: dataforsync,
+            });
+          } else {
+            await CommonModel.updateMasterDetails({
+              table: MODULE_TABLE,
+              data,
+              where: { company_id },
+            });
+          }
         });
 
         if (!result.affectedRows) {
@@ -564,6 +620,56 @@ export const changeStatus = async (req, res) => {
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,
+      message: error.message,
+    });
+  }
+};
+
+
+export const exportCompanyDb = async (req, res) => {
+  const companyId = Number(req.params.id || 0);
+
+  if (!companyId) {
+    return res.status(400).json({ success: false, message: "Company ID required" });
+  }
+
+  const fileName = `company-${companyId}-export-${Date.now()}.sql`;
+  const outputFile = path.join(os.tmpdir(), fileName);
+
+  try {
+    fs.writeFileSync(outputFile, `SET FOREIGN_KEY_CHECKS=0;\n\n`);
+
+    const dumps = [
+      ["company_master", `company_id = ${companyId}`],
+      ["admin", `(company_id = ${companyId} OR default_company = ${companyId})`],
+      ["categories", `(is_sys_category = 'yes' OR company_id = ${companyId})`],
+      ["products", `(company_id = ${companyId} OR company_id IS NULL)`],
+      ["customer", `company_id = ${companyId}`],
+      ["customer_contacts", `customer_id IN (SELECT customer_id FROM ${env.DB_PREFIX}customer WHERE company_id = ${companyId})`],
+      ["tickets", `company_id = ${companyId}`],
+      ["ticket_history", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
+      ["tickets_comments", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
+      ["ticket_work_logs", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
+      ["ticket_visits", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
+      ["reminder_logs", `company_id = ${companyId}`],
+    ];
+
+    for (const [table, where] of dumps) {
+      fs.appendFileSync(outputFile, `\n-- ${env.dbPrefix}${table}\n`);
+      await dumpTable({ table, where, outputFile });
+    }
+
+    fs.appendFileSync(outputFile, `\nSET FOREIGN_KEY_CHECKS=1;\n`);
+
+    res.download(outputFile, fileName, () => {
+      fs.unlink(outputFile, () => { });
+    });
+  } catch (error) {
+    console.log('error : ',error);
+    
+    fs.unlink(outputFile, () => { });
+    return res.status(500).json({
+      success: false,
       message: error.message,
     });
   }

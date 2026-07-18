@@ -12,6 +12,9 @@ import { hashPassword, verifyPassword } from "#shared/utils/password.js";
 import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
 
+// TENANT SYNC 
+import { syncToTenant } from "#shared/utils/tenantSync.js";
+
 const MODULE_TABLE = "admin";
 const USER_LOCATION_LOGS_TABLE = "user_location_logs";
 
@@ -51,6 +54,7 @@ const getLocationPayload = (body = {}) => ({
 
 const saveUserLocationLog = async ({ req, eventType }) => {
   const adminID = req.user?.adminID;
+  // const company = await getCompanyDbConfig(req.user.company_id);
 
   if (!adminID) {
     return {
@@ -79,36 +83,51 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   const now = toMysqlDateTime();
   const aliveData = normalizeJsonValue(data.alive_data);
   const companyId = req.user?.company_id ?? null;
+  const payloadData = sanitizeSqlPayload({
+    adminID,
+    company_id: companyId,
+    event_type: eventType,
+    latitude: String(data.latitude),
+    longitude: String(data.longitude),
+    location: data.location || null,
+    alive_data: aliveData,
+    status: String(data.status),
+    created_by: adminID,
+    created_date: now,
+  });
+  const usersPayloadData = sanitizeSqlPayload({
+    status: String(data.status),
+    latitude: String(data.latitude),
+    longitude: String(data.longitude),
+    alive_data: aliveData,
+    modified_by: adminID,
+    modified_date: now,
+  });
 
+  // tenant lookup sync
+  // if (company?.own_db_enabled === "yes") {
+  //   await runOnTenantDb(company, async () => {
+  //     await CommonModel.saveMasterDetails({
+  //       table: USER_LOCATION_LOGS_TABLE,
+  //       data: payloadData,
+  //     });
+  //     await CommonModel.updateMasterDetails({
+  //       table: MODULE_TABLE,
+  //       data: usersPayloadData,
+  //       where: { adminID },
+  //     });
+  //   });
+  // } else {
+  // }
   await CommonModel.saveMasterDetails({
     table: USER_LOCATION_LOGS_TABLE,
-    data: sanitizeSqlPayload({
-      adminID,
-      company_id: companyId,
-      event_type: eventType,
-      latitude: String(data.latitude),
-      longitude: String(data.longitude),
-      location: data.location || null,
-      alive_data: aliveData,
-      status: String(data.status),
-      created_by: adminID,
-      created_date: now,
-    }),
+    data: payloadData,
   });
-
   await CommonModel.updateMasterDetails({
     table: MODULE_TABLE,
-    data: sanitizeSqlPayload({
-      status: String(data.status),
-      latitude: String(data.latitude),
-      longitude: String(data.longitude),
-      alive_data: aliveData,
-      modified_by: adminID,
-      modified_date: now,
-    }),
+    data: usersPayloadData,
     where: { adminID },
   });
-
   return { data };
 };
 
@@ -324,7 +343,7 @@ export const listNoAuth = async (req, res) => {
     const list = 'name, adminID, company_id, email, roleID ';
     const isCompanyWise = true;
     const wherec = 'name'
-   
+
     if (text) {
       where.push(`t.${wherec} LIKE ?`);
       values.push(`%${text}%`);
@@ -407,6 +426,15 @@ export const getAdminDetails = async (req, res) => {
           table: MODULE_TABLE,
           data,
         });
+        await syncToTenant(data.company_id || req.user.company_id, async () => {
+          await CommonModel.saveMasterDetails({
+            table: MODULE_TABLE,
+            data: {
+              ...data,
+              adminID: result.insertId,
+            },
+          });
+        });
 
         const template = await renderTemplate("userAccountCredentials", "email", {
           name: data.name,
@@ -451,7 +479,7 @@ export const getAdminDetails = async (req, res) => {
         } else {
           delete data.password;
         }
-        
+
         if (data.userName) {
           delete data.password;
         }
@@ -462,10 +490,27 @@ export const getAdminDetails = async (req, res) => {
           modified_date: toMysqlDateTime(),
         });
 
+
         await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
           data,
           where: { adminID },
+        });
+
+        await syncToTenant(data.company_id || req.user.company_id, async () => {
+          const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", { adminID, });
+          if (!details.length) {
+            await CommonModel.saveMasterDetails({
+              table: MODULE_TABLE,
+              data,
+            });
+          } else {
+            await CommonModel.updateMasterDetails({
+              table: MODULE_TABLE,
+              data,
+              where: { adminID },
+            });
+          }
         });
 
         return successResponse(res, {
@@ -534,6 +579,14 @@ export const changeStatus = async (req, res) => {
           where: { adminID: ids },
         });
 
+        // tenant lookup sync
+        await syncToTenant(req.user.company_id, async () => {
+          await CommonModel.deleteMasterDetails({
+            table: MODULE_TABLE,
+            where: { adminID: ids },
+          });
+        });
+
         return successResponse(res, {
           code: 1003,
           httpStatus: 200,
@@ -546,6 +599,15 @@ export const changeStatus = async (req, res) => {
           status,
           ids
         );
+
+        // tenant lookup sync
+        await syncToTenant(req.user.company_id, async () => {
+          await CommonModel.changeMasterStatus(
+            MODULE_TABLE,
+            status,
+            ids
+          );
+        });
 
         return successResponse(res, {
           code: 1002,
@@ -611,6 +673,14 @@ export const updateLocation = async (req, res) => {
       data,
       where: { adminID },
     });
+    // tenant lookup sync
+    await syncToTenant(req.user.company_id, async () => {
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data,
+        where: { adminID },
+      });
+    });
 
     if (!result.affectedRows) {
       return failureResponse(res, {
@@ -637,6 +707,7 @@ export const updateLocation = async (req, res) => {
 
 export const saveSignInLocation = async (req, res) => {
   try {
+
     const result = await saveUserLocationLog({ req, eventType: "signin" });
 
     if (result.error) {
@@ -660,6 +731,7 @@ export const saveSignInLocation = async (req, res) => {
 
 export const saveSignOutLocation = async (req, res) => {
   try {
+
     const result = await saveUserLocationLog({ req, eventType: "signout" });
 
     if (result.error) {
@@ -712,6 +784,15 @@ export const updateStatus = async (req, res) => {
       table: MODULE_TABLE,
       data,
       where: { adminID },
+    });
+
+    // tenant lookup sync
+    await syncToTenant(req.user.company_id, async () => {
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data,
+        where: { adminID },
+      });
     });
 
     if (!result.affectedRows) {
@@ -925,7 +1006,7 @@ export const updateProfile = async (req, res) => {
     if (duplicateCheck) {
       return failureResponse(res, duplicateCheck);
     }
-
+    // 1. main DB update
     await CommonModel.updateMasterDetails({
       table: MODULE_TABLE,
       data: {
@@ -934,6 +1015,19 @@ export const updateProfile = async (req, res) => {
         modified_date: toMysqlDateTime(),
       },
       where: { adminID },
+    });
+
+    // tenant lookup sync
+    await syncToTenant(req.user.company_id, async () => {
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data: {
+          ...result.value,
+          modified_by: adminID,
+          modified_date: toMysqlDateTime(),
+        },
+        where: { adminID },
+      });
     });
 
     const updatedRows = await CommonModel.getMasterDetails(
@@ -1036,6 +1130,19 @@ export const changeProfilePassword = async (req, res) => {
       where: { adminID },
     });
 
+    // tenant lookup sync
+    await syncToTenant(req.user.company_id, async () => {
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data: {
+          password: hashedPassword,
+          modified_by: adminID,
+          modified_date: toMysqlDateTime(),
+        },
+        where: { adminID },
+      });
+    });
+
     return successResponse(res, {
       code: 1002,
       httpStatus: 200,
@@ -1098,3 +1205,9 @@ const validateAdminDetails = async (
 
   return null;
 };
+
+
+
+
+
+

@@ -7,6 +7,7 @@ import { CUSTOMER_SEARCH_COLUMNS, MODULE_TABLE } from "./customer.constants.js";
 import { customColumns, defaultColumns } from "./customer.filter.js";
 import { customerValidationRules } from "./customer.validation.js";
 import {
+  changeCustomersStatus,
   createCustomer,
   deleteCustomers,
   findCustomerProductSerialConflicts,
@@ -35,6 +36,7 @@ import * as XLSX from "xlsx";
 import { env } from "#config/env.js";
 import { buildCustomerWorkbook, isCustomerWorkbook } from "./customer-workbook.utils.js";
 import { buildCustomerExportWorkbook, importCustomerWorkbook } from "./customer-workbook.service.js";
+import { syncToTenant } from "#shared/utils/tenantSync.js";
 
 const buildCustomerDuplicateKey = ({ name = "", email = "", company_id = null } = {}) => {
   const normalizedName = String(name || "").trim().toLowerCase();
@@ -336,8 +338,10 @@ export const changeStatus = async (req, res) => {
         message: "ids are required",
       });
     }
-
-    await deleteCustomers(ids);
+    //  FOR SOFT DELETE
+    await changeCustomersStatus(ids);
+    // FOR HARDCORE DELETE 
+    // await deleteCustomers(ids);
 
     return successResponse(res, {
       code: 1003,
@@ -387,7 +391,10 @@ export const importCustomers = async (req, res) => {
     const workbook = XLSX.read(req.file.buffer, { type: "buffer", cellDates: true });
     if (isCustomerWorkbook(workbook)) {
       const dryRun = String(req.body?.mode || "commit").toLowerCase() === "preview";
-      const result = await importCustomerWorkbook({ workbook, user: req.user, dryRun });
+      const importTask = () => importCustomerWorkbook({ workbook, user: req.user, dryRun });
+      const result = req.own_db_enabled === "yes"
+        ? await syncToTenant(req.user.company_id, importTask)
+        : await importTask();
       return successResponse(res, {
         code: dryRun ? 1004 : 1001,
         httpStatus: 200,
@@ -601,3 +608,4 @@ export const downloadExcel = async (req, res) => {
     });
   }
 };
+
