@@ -10,7 +10,6 @@ import { env } from "node:process";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../../public/images/company-logos");
-
 export const testCompanyDbConnection = async (config) => {
     let connection;
     console.log(config);
@@ -151,7 +150,7 @@ export const dumpTable = ({ table, where, outputFile }) => new Promise((resolve,
     ];
 
     if (where) args.push(`--where=${where}`);
-    const mysqldumpPath = "C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe";
+    const mysqldumpPath = env.MYSQLDUMP_BIN || "mysqldump";
     const child = spawn(mysqldumpPath, args, { stdio: ["ignore", "pipe", "pipe"] });
     const writeStream = fs.createWriteStream(outputFile, { flags: "a" });
 
