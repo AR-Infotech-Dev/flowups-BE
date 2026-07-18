@@ -4,6 +4,6 @@ import * as WorkReportController from "./work-report.controller.js";
 
 const workReportRoutes = express.Router();
 
-workReportRoutes.post("/", requirePermission(["/work-report"], "view"), WorkReportController.list);
+workReportRoutes.post("/", WorkReportController.list);
 
 export default workReportRoutes;

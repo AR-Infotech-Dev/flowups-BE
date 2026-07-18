@@ -1,4 +1,5 @@
 import { DB_PREFIX, getDbPool, query } from "#config/database.js";
+import { getActiveDb } from "#config/db.context.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { isSuperAdminRole } from "#shared/utils/role.utils.js";
 import { findCustomerProductSerialConflicts, getCustomerTableColumns } from "./customer.model.js";
@@ -444,7 +445,8 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
   };
 
   for (const customerRow of customerRows) {
-    const connection = await getDbPool().getConnection();
+    const dbPool = getActiveDb() || getDbPool();
+    const connection = await dbPool.getConnection();
     try {
       if (normalizeAction(customerRow.action) === "DELETE") {
         throw new Error("Customer deletion is not allowed from import. Delete it from the application.");
@@ -557,3 +559,4 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
 
   return result;
 };
+

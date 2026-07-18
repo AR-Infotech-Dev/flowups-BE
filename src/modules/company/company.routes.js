@@ -20,11 +20,13 @@ const logoUpload = multer({
 companyRoutes.post("/", requirePermission(['company-master', 'companies'], "view"), companyController.list);
 companyRoutes.post("/delete", requirePermission(['company-master', 'companies'], "delete"), companyController.changeStatus);
 companyRoutes.post("/mail-config/test", requirePermission(['company-master', 'companies'], "edit"), companyController.testMailConfig);
+companyRoutes.post("/db-config/test", requirePermission(['company-master', 'companies'], "edit"), companyController.testDBConfig);
 companyRoutes.post("/logo", requirePermission(['company-master', 'companies'], "create"), logoUpload.single("logo"), companyController.uploadCompanyLogo);
 companyRoutes.post("/:id/logo", requirePermission(['company-master', 'companies'], "edit"), logoUpload.single("logo"), companyController.uploadCompanyLogo);
 companyRoutes.delete("/:id/logo/remove", requirePermission(['company-master', 'companies'], "edit"), companyController.removeCompanyLogo);
 companyRoutes.put("/create", requirePermission(['company-master', 'companies'], "create"), companyController.getCompanyDetails);
 companyRoutes.get("/:id", requirePermission(['company-master', 'companies'], "view"), companyController.getCompanyDetails);
 companyRoutes.post("/:id", requirePermission(['company-master', 'companies'], "edit"), companyController.getCompanyDetails);
+companyRoutes.get("/:id/export-db", requirePermission("companies", "view"), companyController.exportCompanyDb);
 
 export default companyRoutes;

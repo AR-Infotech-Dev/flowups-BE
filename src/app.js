@@ -29,7 +29,9 @@ app.use(cors({
 morgan.token("ip", (req) => {
   return req.ip;
 });
-app.use(morgan(":ip :method :url :status :res[content-length] - :response-time ms"));
+
+// app.use(morgan(":ip :method :url :status [:res[own_db_enabled]] :res[content-length] - :response-time ms"));
+app.use(morgan(":ip :method :active_db :url :status  :res[content-length] - :response-time ms"));
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));

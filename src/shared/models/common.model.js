@@ -255,7 +255,7 @@ export const deleteMasterDetails = async ({ table = "", where = {} } = {}) => {
 // =====================================
 // CHANGE STATUS
 // =====================================
-export const changeMasterStatus = async ({ table = "", status = "Y", ids = [], key = "adminID" } = {}) => {
+export const changeMasterStatus = async ({ table = "", status = "delete", ids = [], key = "adminID" } = {}) => {
     const placeholders = ids.map(() => "?").join(",");
 
     const sql = `
@@ -279,4 +279,8 @@ export const updateMenuPositions = async ({ table = "", positions = [] }) => {
     `;
     const result = await query(sql);
     return result;
+}
+
+export const getCompanyDbConfig = async (companyId) => {
+    return await getSpecificDetails("company_master", "company_id, own_db_enabled, db_type, db_host, db_port, db_name, db_username, db_password, db_ssl_enabled, db_status, db_tested_at", {company_id : companyId});
 }
