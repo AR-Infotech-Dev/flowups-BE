@@ -93,7 +93,6 @@ const saveUserLocationLog = async ({ req, eventType }) => {
     alive_data: aliveData,
     status: String(data.status),
     created_by: adminID,
-    created_date: now,
   });
   const usersPayloadData = sanitizeSqlPayload({
     status: String(data.status),
