@@ -54,7 +54,7 @@ const getLocationPayload = (body = {}) => ({
 
 const saveUserLocationLog = async ({ req, eventType }) => {
   const adminID = req.user?.adminID;
-  // const company = await getCompanyDbConfig(req.user.company_id);
+  const company = await getCompanyDbConfig(req.user.company_id);
 
   if (!adminID) {
     return {
@@ -104,29 +104,31 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   });
 
   // tenant lookup sync
-  // if (company?.own_db_enabled === "yes") {
-  //   await runOnTenantDb(company, async () => {
-  //     await CommonModel.saveMasterDetails({
-  //       table: USER_LOCATION_LOGS_TABLE,
-  //       data: payloadData,
-  //     });
-  //     await CommonModel.updateMasterDetails({
-  //       table: MODULE_TABLE,
-  //       data: usersPayloadData,
-  //       where: { adminID },
-  //     });
-  //   });
-  // } else {
-  // }
-  await CommonModel.saveMasterDetails({
-    table: USER_LOCATION_LOGS_TABLE,
-    data: payloadData,
-  });
-  await CommonModel.updateMasterDetails({
-    table: MODULE_TABLE,
-    data: usersPayloadData,
-    where: { adminID },
-  });
+  if (company?.own_db_enabled === "yes") {
+    await runOnTenantDb(company, async () => {
+      await CommonModel.saveMasterDetails({
+        table: USER_LOCATION_LOGS_TABLE,
+        data: payloadData,
+      });
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data: usersPayloadData,
+        where: { adminID },
+      });
+    });
+  } else {
+    await CommonModel.saveMasterDetails({
+      table: USER_LOCATION_LOGS_TABLE,
+      data: payloadData,
+    });
+
+    await CommonModel.updateMasterDetails({
+      table: MODULE_TABLE,
+      data: usersPayloadData,
+      where: { adminID },
+    });
+  }
+
   return { data };
 };
 
