@@ -11,9 +11,9 @@ import { renderTemplate } from "#shared/utils/templateMaker.js";
 import { hashPassword, verifyPassword } from "#shared/utils/password.js";
 import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
-
 // TENANT SYNC 
 import { syncToTenant } from "#shared/utils/tenantSync.js";
+import { getCompanyDbConfig } from "#shared/models/common.model.js";
 
 const MODULE_TABLE = "admin";
 const USER_LOCATION_LOGS_TABLE = "user_location_logs";
