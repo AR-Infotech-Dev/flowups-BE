@@ -42,7 +42,7 @@ const getSmtpTransportOptions = (companyConfig = {}) => {
         port,
         secure: encryption === "ssl" || port === 465,
         auth: {
-            user: companyConfig.smtp_username || companyConfig.sender_email,
+            user: companyConfig.sender_email || companyConfig.smtp_username,
             pass: companyConfig.email_app_password,
         },
         requireTLS: encryption === "tls",
@@ -110,8 +110,8 @@ export const testSmtpConnection = async (config = {}) => {
             message: "SMTP connection successful",
         };
     } catch (error) {
-        console.log();
-        
+        console.log(error);
+
         return {
             success: false,
             message: getFriendlySmtpError(error),
