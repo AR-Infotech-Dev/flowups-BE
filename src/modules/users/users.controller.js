@@ -55,7 +55,10 @@ const getLocationPayload = (body = {}) => ({
 
 const saveUserLocationLog = async ({ req, eventType }) => {
   const adminID = req.user?.adminID;
+  console.log("company_id : ",req.user.company_id);
+  
   const company = await getCompanyDbConfig(req.user.company_id);
+  console.log("company : ",company);
 
   if (!adminID) {
     return {
