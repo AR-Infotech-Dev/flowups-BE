@@ -116,7 +116,7 @@ const saveUserLocationLog = async ({ req, eventType }) => {
     where: { adminID },
   });
 
-  if (company?.own_db_enabled === "yes") {
+  if (company?.own_db_enabled === 'yes') {
     await syncToTenant(company, async () => {
       console.log('creating to tenant  : ', USER_LOCATION_LOGS_TABLE,);
 
