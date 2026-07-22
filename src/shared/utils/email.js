@@ -99,8 +99,6 @@ export const testSmtpConnection = async (config = {}) => {
             message: "SMTP connection successful",
         };
     } catch (error) {
-        console.log(error);
-
         return {
             success: false,
             message: getFriendlySmtpError(error),

@@ -105,13 +105,24 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   });
 
   // tenant lookup sync
+  console.log('updating to main  : ', MODULE_TABLE,);
+
+  await CommonModel.updateMasterDetails({
+    table: MODULE_TABLE,
+    data: usersPayloadData,
+    where: { adminID },
+  });
 
   if (company?.own_db_enabled === "yes") {
     await syncToTenant(company, async () => {
+      console.log('creating to tenant  : ', USER_LOCATION_LOGS_TABLE,);
+
       await CommonModel.saveMasterDetails({
         table: USER_LOCATION_LOGS_TABLE,
         data: payloadData,
       });
+      console.log('updating to main  : ', MODULE_TABLE,);
+
       await CommonModel.updateMasterDetails({
         table: MODULE_TABLE,
         data: usersPayloadData,
@@ -119,16 +130,13 @@ const saveUserLocationLog = async ({ req, eventType }) => {
       });
     });
   } else {
+    console.log('creating to main  : ', USER_LOCATION_LOGS_TABLE,);
+
     await CommonModel.saveMasterDetails({
       table: USER_LOCATION_LOGS_TABLE,
       data: payloadData,
     });
   }
-  await CommonModel.updateMasterDetails({
-    table: MODULE_TABLE,
-    data: usersPayloadData,
-    where: { adminID },
-  });
 
   return { data };
 };
