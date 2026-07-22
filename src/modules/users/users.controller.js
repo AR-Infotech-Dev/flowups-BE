@@ -13,6 +13,7 @@ import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
 // TENANT SYNC 
 import { syncToTenant } from "#shared/utils/tenantSync.js";
+
 import { getCompanyDbConfig } from "#shared/models/common.model.js";
 
 const MODULE_TABLE = "admin";
@@ -104,8 +105,9 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   });
 
   // tenant lookup sync
+
   if (company?.own_db_enabled === "yes") {
-    await runOnTenantDb(company, async () => {
+    await syncToTenant(company, async () => {
       await CommonModel.saveMasterDetails({
         table: USER_LOCATION_LOGS_TABLE,
         data: payloadData,
@@ -121,13 +123,12 @@ const saveUserLocationLog = async ({ req, eventType }) => {
       table: USER_LOCATION_LOGS_TABLE,
       data: payloadData,
     });
-
-    await CommonModel.updateMasterDetails({
-      table: MODULE_TABLE,
-      data: usersPayloadData,
-      where: { adminID },
-    });
   }
+  await CommonModel.updateMasterDetails({
+    table: MODULE_TABLE,
+    data: usersPayloadData,
+    where: { adminID },
+  });
 
   return { data };
 };
