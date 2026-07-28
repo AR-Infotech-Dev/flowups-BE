@@ -55,11 +55,7 @@ const getLocationPayload = (body = {}) => ({
 
 const saveUserLocationLog = async ({ req, eventType }) => {
   const adminID = req.user?.adminID;
-  console.log("company_id : ", req.user.company_id);
-
   const company = await getCompanyDbConfig(req.user.company_id);
-  console.log("company : ", company);
-
   if (!adminID) {
     return {
       error: {
@@ -108,28 +104,17 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   });
 
   // tenant lookup sync
-  console.log('updating to main  : ', MODULE_TABLE,);
-
   await CommonModel.updateMasterDetails({
     table: MODULE_TABLE,
     data: usersPayloadData,
     where: { adminID },
   });
-  console.log('1');
-
   if (company?.own_db_enabled === 'yes') {
-    console.log('2');
     await syncToTenant(companyId, async () => {
-      console.log('creating to tenant  : ', USER_LOCATION_LOGS_TABLE,);
-
-      console.log('3');
       await CommonModel.saveMasterDetails({
         table: USER_LOCATION_LOGS_TABLE,
         data: payloadData,
       });
-      console.log('updating to tenant  : ', MODULE_TABLE,);
-      console.log('4');
-
       await CommonModel.updateMasterDetails({
         table: MODULE_TABLE,
         data: usersPayloadData,
@@ -137,9 +122,6 @@ const saveUserLocationLog = async ({ req, eventType }) => {
       });
     });
   } else {
-    console.log('creating to main  : ', USER_LOCATION_LOGS_TABLE,);
-    console.log('5');
-
     await CommonModel.saveMasterDetails({
       table: USER_LOCATION_LOGS_TABLE,
       data: payloadData,
