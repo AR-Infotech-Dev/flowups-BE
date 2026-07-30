@@ -20,6 +20,7 @@ import reportsRoutes from "#modules/reports/reports.routes.js";
 import subscriptionRoutes from "#modules/subscriptions/subscriptions.routes.js";
 import * as ticketVisitsController from "#modules/ticket/ticket-visits.controller.js";
 
+
 import { verifyToken } from "#middlewares/auth.middleware.js"
 
 const router = express.Router();
@@ -43,6 +44,7 @@ router.use("/subscriptions", verifyToken, subscriptionRoutes);
 router.use('/permissions', verifyToken, moduleAccessRoutes);
 router.use("/notifications", verifyToken, notificationRoutes);
 router.use("/dashboard", verifyToken, dashboardRoutes);
+
 
 
 export default router;

@@ -1,9 +1,10 @@
 import express from "express";
-import { submitTicketFeedback } from "./feedback.controller.js";
-import { tenantDbMiddleware } from "#middlewares/ownDB.middleware.js";
+import { submitTicketFeedback, list,getReviewRatings } from "./feedback.controller.js";
+import { verifyToken } from "#middlewares/auth.middleware.js";
 
 const router = express.Router();
-
-router.post("/feedback/submit", tenantDbMiddleware, submitTicketFeedback);
+router.post("/feedbacks", submitTicketFeedback);
+router.post("/reviews", verifyToken, list);
+router.post("/review-ratings", verifyToken,getReviewRatings);
 
 export default router;
