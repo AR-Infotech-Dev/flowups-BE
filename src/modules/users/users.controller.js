@@ -11,9 +11,10 @@ import { renderTemplate } from "#shared/utils/templateMaker.js";
 import { hashPassword, verifyPassword } from "#shared/utils/password.js";
 import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
-
 // TENANT SYNC 
 import { syncToTenant } from "#shared/utils/tenantSync.js";
+
+import { getCompanyDbConfig } from "#shared/models/common.model.js";
 
 const MODULE_TABLE = "admin";
 const USER_LOCATION_LOGS_TABLE = "user_location_logs";
@@ -54,8 +55,7 @@ const getLocationPayload = (body = {}) => ({
 
 const saveUserLocationLog = async ({ req, eventType }) => {
   const adminID = req.user?.adminID;
-  // const company = await getCompanyDbConfig(req.user.company_id);
-
+  const company = await getCompanyDbConfig(req.user.company_id);
   if (!adminID) {
     return {
       error: {
@@ -93,7 +93,6 @@ const saveUserLocationLog = async ({ req, eventType }) => {
     alive_data: aliveData,
     status: String(data.status),
     created_by: adminID,
-    created_date: now,
   });
   const usersPayloadData = sanitizeSqlPayload({
     status: String(data.status),
@@ -105,29 +104,30 @@ const saveUserLocationLog = async ({ req, eventType }) => {
   });
 
   // tenant lookup sync
-  // if (company?.own_db_enabled === "yes") {
-  //   await runOnTenantDb(company, async () => {
-  //     await CommonModel.saveMasterDetails({
-  //       table: USER_LOCATION_LOGS_TABLE,
-  //       data: payloadData,
-  //     });
-  //     await CommonModel.updateMasterDetails({
-  //       table: MODULE_TABLE,
-  //       data: usersPayloadData,
-  //       where: { adminID },
-  //     });
-  //   });
-  // } else {
-  // }
-  await CommonModel.saveMasterDetails({
-    table: USER_LOCATION_LOGS_TABLE,
-    data: payloadData,
-  });
   await CommonModel.updateMasterDetails({
     table: MODULE_TABLE,
     data: usersPayloadData,
     where: { adminID },
   });
+  if (company?.own_db_enabled === 'yes') {
+    await syncToTenant(companyId, async () => {
+      await CommonModel.saveMasterDetails({
+        table: USER_LOCATION_LOGS_TABLE,
+        data: payloadData,
+      });
+      await CommonModel.updateMasterDetails({
+        table: MODULE_TABLE,
+        data: usersPayloadData,
+        where: { adminID },
+      });
+    });
+  } else {
+    await CommonModel.saveMasterDetails({
+      table: USER_LOCATION_LOGS_TABLE,
+      data: payloadData,
+    });
+  }
+
   return { data };
 };
 

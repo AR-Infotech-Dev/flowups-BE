@@ -520,7 +520,7 @@ export const exportUserPerformanceExcel = async (req, res) => {
       getPerformanceTicketsForExport({ body, user: req.user }),
     ]);
     // console.log(tickets);
-    console.log(summary);
+    // console.log(summary);
 
     const attachment = await buildPerformanceExcelAttachment({ filters: body, summary, tickets, user: userDetails });
     return sendExcelDownload(res, attachment);

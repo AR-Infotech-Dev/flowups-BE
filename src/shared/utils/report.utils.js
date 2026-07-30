@@ -203,6 +203,7 @@ export const buildPerformanceExcelAttachment = async ({ filters = {}, summary = 
       supportRows: tickets.map(
         (row, index) => ({
           srNo: index + 1,
+          ticket_no: row.ticket_no || "-",
           customer_name: row.customer_name || "-",
           created_date: formatDate(row.created_date) || "-",
           ticket_priority: row.ticket_priority || "-",

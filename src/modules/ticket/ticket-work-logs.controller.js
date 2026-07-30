@@ -122,7 +122,6 @@ export const create = async (req, res) => {
     try {
         const ticketId = req.body.ticket_id;
         const ticket = await getTicket(ticketId);
-        console.log('ticket :', ticket)
 
         //TICKET REQUIRED
         if (!ticket) {
