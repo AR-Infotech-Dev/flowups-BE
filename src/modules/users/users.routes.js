@@ -7,8 +7,8 @@ const usersRoutes = express.Router();
 usersRoutes.post('/', requirePermission(['admin', 'users'], 'view'), userController.list);
 // ONLY ON SIDE TENANT-DB / MAIN-DB
 usersRoutes.post('/delete', requirePermission(['admin', 'users'], 'delete'), userController.changeStatus);
-usersRoutes.post('/sign-in', tenantDbMiddleware,userController.saveSignInLocation);
-usersRoutes.post('/sign-out', tenantDbMiddleware,userController.saveSignOutLocation);
+usersRoutes.post('/sign-in',userController.saveSignInLocation);
+usersRoutes.post('/sign-out',userController.saveSignOutLocation);
 usersRoutes.post('/get-markers',tenantDbMiddleware, userController.getMarkers);
 // USED FOR BOTH SIDE WITH TENANT-SYNC
 usersRoutes.post('/update-location', userController.updateLocation);

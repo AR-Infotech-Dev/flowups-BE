@@ -143,8 +143,6 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
     text: "",
     company_id: details.company_id || null,
   });
-  console.log("is Email sent : ",result);
-  
   return result?.success
     ? { success: true }
     : { success: false, message: result?.error || "Email sending failed" };

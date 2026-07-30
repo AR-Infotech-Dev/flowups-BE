@@ -229,7 +229,7 @@ export const testDBConfig = async (req, res) => {
     const data = validation.data;
     const result = await testCompanyDbConnection(data);
     const companyId = req.user.company_id || null;
-    
+
     if (companyId) {
       try {
         await CommonModel.updateMasterDetails({
@@ -651,6 +651,7 @@ export const exportCompanyDb = async (req, res) => {
       ["tickets_comments", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
       ["ticket_work_logs", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
       ["ticket_visits", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
+      ["notifications", `user_id IN ( SELECT user_id FROM ${env.DB_PREFIX}admin WHERE company_id = ${companyId} )`]
       ["reminder_logs", `company_id = ${companyId}`],
     ];
 
@@ -665,8 +666,8 @@ export const exportCompanyDb = async (req, res) => {
       fs.unlink(outputFile, () => { });
     });
   } catch (error) {
-    console.log('error : ',error);
-    
+    console.log('error : ', error);
+
     fs.unlink(outputFile, () => { });
     return res.status(500).json({
       success: false,

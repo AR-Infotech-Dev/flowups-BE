@@ -37,13 +37,12 @@ const getSmtpTransportOptions = (companyConfig = {}) => {
     const defaults = PROVIDER_DEFAULTS[provider] || {};
     const encryption = String(companyConfig.smtp_encryption || "tls").toLowerCase();
     const port = Number(companyConfig.smtp_port || defaults.port || 587);
-
     return {
         host: companyConfig.smtp_host || defaults.host || "smtp.gmail.com",
         port,
         secure: encryption === "ssl" || port === 465,
         auth: {
-            user: companyConfig.smtp_username || companyConfig.sender_email,
+            user: companyConfig.sender_email || companyConfig.smtp_username,
             pass: companyConfig.email_app_password,
         },
         requireTLS: encryption === "tls",

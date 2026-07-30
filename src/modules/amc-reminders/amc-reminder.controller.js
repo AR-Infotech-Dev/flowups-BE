@@ -464,7 +464,6 @@ export const createProductExpiryCall = async (req, res) => {
   try {
     const customerId = req.body.customer_id || req.body.customerId || req.body.client_id;
     const product = req.body.product;
-    console.log(product);
 
     if (!customerId) {
       return failureResponse(res, { code: 2001, httpStatus: 400, message: "customer_id is required" });
