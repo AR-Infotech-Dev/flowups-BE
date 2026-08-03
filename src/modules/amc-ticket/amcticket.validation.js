@@ -1,0 +1,14 @@
+export const ticketValidationRules = {
+  ticket_id: { label: "Ticket ID", type: "number" },
+  client_id: { label: "Client", type: "number" },
+  assignee: { label: "Assignee", type: "number" },
+  ticket_priority: { label: "Ticket Priority", type: "number" },
+  ticket_status: { label: "Ticket Status", type: "number" },
+  query_type: { label: "Query Type", type: "number" },
+  due_date: { label: "Due Date", type: "date" },
+  description: { label: "Description" },
+  product_add_ons: { label: "Product Add-ons" },
+  created_by: { label: "Created By", type: "number" },
+  modified_by: { label: "Modified By", type: "number" },
+};
+
