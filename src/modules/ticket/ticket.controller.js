@@ -64,8 +64,6 @@ export const list = async (req, res) => {
       values.push(ticket_status);
     }
 
-
-
     if (req.own_db_enabled == "no" && !isSuperAdmin(req.user) && req.user.company_id) {
       where.push("t.company_id = ?");
       values.push(req.user.company_id);
@@ -81,13 +79,23 @@ export const list = async (req, res) => {
       where.push(`(t.assignee = ? OR t.created_by = ? OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")})`);
       values.push(userId, userId, String(userId), String(userId), userId);
     }
+
+    join.push({
+      type: 'LEFT JOIN',
+      table: 'ticket_feedback',
+      alias: 'fd',
+      key1: 'ticket_id',
+      key2: 'ticket_id',
+      column: 'rating'
+    });
+
     const needsJoinedCount = Boolean(searchText) || effectiveFilters.some((filter) => ['ticket_priority', 'ticket_status', 'query_type', 'assignee', 'client_id', 'company_id', 'modified_by', 'created_by'].includes(filter?.field));
     const total = await countTickets({ where, values, join: needsJoinedCount ? join : [], other });
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
     const rows = getAll === "Y"
       ? await listTickets({ select, where, values, join, other })
-      : await listTickets({ select, where, values, join, other, limit, start });
+      : await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
 
     if (shouldFilterByAssignee && rows.length) {
       const historyRows = await getTicketVisibilityRows(rows.map((row) => row.ticket_id), userId);
@@ -292,8 +300,17 @@ const updateTicketDetails = async (req, res, ticket_id = null) => {
 
 const readTicketDetails = async (res, ticket_id = null) => {
   if (!ticket_id) return failureResponse(res, { code: 2004, httpStatus: 404 });
-
-  const details = await getTicketById(ticket_id);
+  const join = [
+    {
+      type: 'LEFT JOIN',
+      table: 'ticket_feedback',
+      alias: 'fd',
+      key1: 'ticket_id',
+      key2: 'ticket_id',
+      column: 'rating'
+    }
+  ]
+  const details = await getTicketById(ticket_id, join);
   if (!details.length) return failureResponse(res, { code: 2004, httpStatus: 404 });
 
   return successResponse(res, { code: 1004, httpStatus: 200, data: { data: details[0] } });
