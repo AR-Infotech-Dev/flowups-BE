@@ -23,7 +23,7 @@ const default_columns = {
     alias: "ad",
     column: "ticket_no",
     key2: "ticket_id",
-    select: "",
+    select: "ad.ticket_no as ticket_no, ad.ticket_id as ticket_id",
   },
 
 };
