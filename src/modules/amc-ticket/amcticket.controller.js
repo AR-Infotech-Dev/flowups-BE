@@ -6,9 +6,9 @@ import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { buildTablePayload } from "#shared/utils/tablePayload.js";
 import { createFeedbackToken } from "#modules/feedback/feedback.controller.js";
 import { createCustomerContactIfMissing } from "#modules/customer/customer.model.js";
-import { hasActiveWorkLog } from "./ticket-work-logs.controller.js";
-import { MODULE_TABLE, TICKET_SEARCH_COLUMNS, TICKET_STATUS_CLOSE } from "./ticket.constants.js";
-import { customColumns, defaultColumns } from "./ticket.filter.js";
+import { hasActiveWorkLog } from "./amcticket-work-logs.controller.js";
+import { MODULE_TABLE, TICKET_SEARCH_COLUMNS, TICKET_STATUS_CLOSE } from "./amcticket.constants.js";
+import { customColumns, defaultColumns } from "./amcticket.filter.js";
 import {
   changeTicketStatus,
   countTickets,
@@ -23,7 +23,7 @@ import {
   listTickets,
   setTicketFeedbackToken,
   updateTicket,
-} from "./ticket.model.js";
+} from "./amcticket.model.js";
 import {
   emitNotification,
   getAssigneeHistoryExistsSql,
@@ -32,9 +32,9 @@ import {
   prepareTicketBody,
   resolveTicketActiveAmc,
   sendEmailToClient,
-} from "./ticket.utils.js";
-import { generateTicketNumber } from "./ticket-number.helper.js";
-import { ticketValidationRules } from "./ticket.validation.js";
+} from "./amcticket.utils.js";
+import { generateTicketNumber } from "./amcticket-number.helper.js";
+import { ticketValidationRules } from "./amcticket.validation.js";
 
 export const list = async (req, res) => {
   try {
@@ -64,38 +64,30 @@ export const list = async (req, res) => {
       values.push(ticket_status);
     }
 
+
+
     if (req.own_db_enabled == "no" && !isSuperAdmin(req.user) && req.user.company_id) {
       where.push("t.company_id = ?");
       values.push(req.user.company_id);
     }
 
     where.push("t.amc_call = ?");
-    values.push("n");
+    values.push("y");
     where.push("t.call_direction = ?");
-    values.push("in");
+    values.push("out");
 
     const shouldFilterByAssignee = !isSuperAdmin(req.user) && !(isAdmin(req.user) && (viewAll === "Y" || getAll === "Y")) && userId;
     if (shouldFilterByAssignee) {
       where.push(`(t.assignee = ? OR t.created_by = ? OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")})`);
       values.push(userId, userId, String(userId), String(userId), userId);
     }
-
-    join.push({
-      type: 'LEFT JOIN',
-      table: 'ticket_feedback',
-      alias: 'fd',
-      key1: 'ticket_id',
-      key2: 'ticket_id',
-      column: 'rating'
-    });
-
     const needsJoinedCount = Boolean(searchText) || effectiveFilters.some((filter) => ['ticket_priority', 'ticket_status', 'query_type', 'assignee', 'client_id', 'company_id', 'modified_by', 'created_by'].includes(filter?.field));
     const total = await countTickets({ where, values, join: needsJoinedCount ? join : [], other });
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
     const rows = getAll === "Y"
       ? await listTickets({ select, where, values, join, other })
-      : await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
+      : await listTickets({ select, where, values, join, other, limit, start });
 
     if (shouldFilterByAssignee && rows.length) {
       const historyRows = await getTicketVisibilityRows(rows.map((row) => row.ticket_id), userId);
@@ -300,17 +292,8 @@ const updateTicketDetails = async (req, res, ticket_id = null) => {
 
 const readTicketDetails = async (res, ticket_id = null) => {
   if (!ticket_id) return failureResponse(res, { code: 2004, httpStatus: 404 });
-  const join = [
-    {
-      type: 'LEFT JOIN',
-      table: 'ticket_feedback',
-      alias: 'fd',
-      key1: 'ticket_id',
-      key2: 'ticket_id',
-      column: 'rating'
-    }
-  ]
-  const details = await getTicketById(ticket_id, join);
+
+  const details = await getTicketById(ticket_id);
   if (!details.length) return failureResponse(res, { code: 2004, httpStatus: 404 });
 
   return successResponse(res, { code: 1004, httpStatus: 200, data: { data: details[0] } });

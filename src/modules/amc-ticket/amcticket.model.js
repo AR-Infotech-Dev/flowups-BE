@@ -1,11 +1,10 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import * as CommonModel from "#shared/models/common.model.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
-import { join } from "node:path";
-import { MODULE_TABLE } from "./ticket.constants.js";
-import { customColumns, defaultColumns } from "./ticket.filter.js";
+import { MODULE_TABLE } from "./amcticket.constants.js";
+import { customColumns, defaultColumns } from "./amcticket.filter.js";
 
-export const getTicketById = (ticketId,join) => CommonModel.getMasterDetails(MODULE_TABLE, "t.*, fd.rating as ratings", { "t.ticket_id": ticketId },join);
+export const getTicketById = (ticketId) => CommonModel.getMasterDetails(MODULE_TABLE, "*", { ticket_id: ticketId });
 
 export const createTicket = (data) => CommonModel.saveMasterDetails({ table: MODULE_TABLE, data });
 

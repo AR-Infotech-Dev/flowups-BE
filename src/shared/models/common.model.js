@@ -3,6 +3,16 @@ import { query, DB_PREFIX } from "#config/database.js";
 // =====================================
 // LAST INSERT ID
 // =====================================
+const printSql = (sql, params) => {
+    let fullSql = sql;
+    params.forEach(param => {
+        const formattedParam = typeof param === 'string' ? `'${param.replace(/'/g, "''")}'` : param;
+        fullSql = fullSql.replace('?', formattedParam);
+    });
+    console.log('{');
+    console.log('Sql :', fullSql);
+    console.log('}');
+}
 export const getLastInsertedID = (result) => {
     return result?.insertId || 0;
 };
@@ -31,8 +41,8 @@ const normalizeWriteData = (data = {}) =>
 // =====================================
 // GET MASTER DETAILS
 // =====================================
-export const getMasterDetails = async (table = "", select = "*", where = {}) => {
-    let sql = ` SELECT ${select} FROM ${DB_PREFIX}${table}`;
+export const getMasterDetails = async (table = "", select = "*", where = {}, join = []) => {
+    let sql = ` SELECT ${select} FROM ${DB_PREFIX}${table} as t`;
 
     const values = [];
     const conditions = [];
@@ -41,11 +51,15 @@ export const getMasterDetails = async (table = "", select = "*", where = {}) => 
         conditions.push(`${key} = ?`);
         values.push(value);
     });
-
+    if (join.length) {
+        join.forEach(({ type = "LEFT", table, alias, key1, key2, key1Alias = "t" }) => {
+            sql += ` ${type} ${DB_PREFIX}${table} ${alias} ON ${key1Alias}.${key1} = ${alias}.${key2} `;
+        });
+    }
     if (conditions.length) {
         sql += ` WHERE ${conditions.join(" AND ")}`;
     }
-
+    printSql(sql, values)
     return await query(sql, values);
 };
 export const getSpecificDetails = async (table = "", select = "*", where = {}) => {
@@ -282,5 +296,5 @@ export const updateMenuPositions = async ({ table = "", positions = [] }) => {
 }
 
 export const getCompanyDbConfig = async (companyId) => {
-    return await getSpecificDetails("company_master", "company_id, own_db_enabled, db_type, db_host, db_port, db_name, db_username, db_password, db_ssl_enabled, db_status, db_tested_at", {company_id : companyId});
+    return await getSpecificDetails("company_master", "company_id, own_db_enabled, db_type, db_host, db_port, db_name, db_username, db_password, db_ssl_enabled, db_status, db_tested_at", { company_id: companyId });
 }

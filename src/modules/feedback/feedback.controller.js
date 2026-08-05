@@ -42,18 +42,14 @@ export const list = async (req, res) => {
       filters,
     } = req.body;
 
-    // const limit = 10;
     const limit = env.perPage;
-
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
-
     const other1 = {
       orderBy,
       order,
       searchColumns: ["feedback_id", "ticket_id", "client_id", "rating", "is_resolved", "comment", "submitted_at", "feedback_submitted"],
     };
-
     const filterData = prepareFilterData({
       filters,
       searchText,
@@ -61,11 +57,7 @@ export const list = async (req, res) => {
       default_columns,
       custom_columns,
     });
-
     const { select, where, values, join, other } = filterData;
-
-
-
     const scopedCompanyId = isSuperAdminRole(req.user.adminID)
       ? null
       : getUserCompanyId(req.user.adminID);
@@ -75,44 +67,17 @@ export const list = async (req, res) => {
       values.push(scopedCompanyId);
     };
 
-    const total = await CommonModel.getCountsByParameter({
-      table: MODULE_TABLE,
-      where,
-      values,
-      join,
-      other,
-    });
-
-
-
-
+    const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other, });
     const totalPages = Math.ceil(total / limit);
-
     let end = start + limit;
     if (end > total) end = total;
 
     let data = [];
 
     if (getAll === "Y") {
-      data = await CommonModel.GetMasterListDetails({
-        select,
-        table: MODULE_TABLE,
-        where,
-        values,
-        join,
-        other,
-      });
+      data = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, join, other, });
     } else {
-      data = await CommonModel.GetMasterListDetails({
-        select,
-        table: MODULE_TABLE,
-        where,
-        values,
-        limit,
-        start,
-        join,
-        other,
-      });
+      data = await CommonModel.GetMasterListDetails({ select, table: MODULE_TABLE, where, values, limit, start, join, other, });
     }
 
     return successResponse(res, {
@@ -120,7 +85,6 @@ export const list = async (req, res) => {
       httpStatus: 200,
       data: {
         data,
-
         pagination: {
           total,
           page: currentPage,
@@ -132,8 +96,6 @@ export const list = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,
@@ -141,7 +103,6 @@ export const list = async (req, res) => {
     });
   }
 };
-
 
 export const createFeedbackToken = () => {
   return crypto.randomBytes(32).toString("hex");
@@ -153,17 +114,8 @@ export const createFeedbackToken = () => {
 ====================================================== */
 export const submitTicketFeedback = async (req, res) => {
   try {
-    const {
-      ticket_id = null,
-      token = "",
-      rating = "",
-      is_resolved = "yes",
-      comment = "",
-    } = req.body;
+    const { ticket_id = null, token = "", rating = "", is_resolved = "yes", comment = "", } = req.body;
 
-    /* =====================================
-       VALIDATION
-    ===================================== */
     if (!ticket_id) {
       return failureResponse(res, {
         code: 2004,
@@ -274,7 +226,7 @@ export const getReviewRatings = async (req, res) => {
       code: 1004,
       httpStatus: 200,
       data: {
-        data: ratingsSummary
+        data: ratingsSummary[0] || {}
       },
     });
 

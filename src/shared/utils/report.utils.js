@@ -283,3 +283,75 @@ export const buildCustomerWiseExcelAttachment = async ({ company = {}, customers
     contentType: "application/vnd.ms-excel",
   };
 };
+export const buildUserWiseAttendanceExcelAttachment = async ({
+  company = {},
+  users = [],
+  filters = {},
+  summary = {},
+}) => {
+  const spreadsheetColumnCount = 9;
+
+  const details = {
+    "Company ID": company.company_id || "-",
+    "Company Name": company.company_name || "-",
+    "From Date": filters.from_date || "-",
+    "To Date": filters.to_date || "-",
+  };
+
+  const summaryDetails = {
+    "Total Users": summary.total_users || 0,
+    "Signed In Users": summary.signed_in_users || 0,
+    "Signed Out Users": summary.signed_out_users || 0,
+    "Total Logs": summary.total_logs || 0,
+    "Total Sign In": summary.total_signins || 0,
+    "Total Sign Out": summary.total_signouts || 0,
+  };
+
+  const htmlBody = await renderTemplate(
+    "userWiseAttendanceReport",
+    "excel",
+    {
+      spreadsheetColumnCount,
+      reportTitle: "User Wise Attendance Report",
+
+      spacerRow: await buildSheetSpacerRow(
+        18,
+        spreadsheetColumnCount
+      ),
+
+      summarySection: await buildSideBySideRows({
+        leftTitle: "Summary",
+        leftData: summaryDetails,
+        rightTitle: "Report Details",
+        rightData: details,
+        gapCols: 3,
+        labelColspan: 1,
+        valueColspan: 2,
+      }),
+
+      hasSupportRows: users.length > 0,
+
+      supportRows: users.map((row, index) => ({
+        srNo: index + 1,
+        user_name: row.user_name || "-",
+        username: row.username || "-",
+        email: row.email || "-",
+        contactNo: row.contactNo || "-",
+        total_logs: row.total_logs || 0,
+        total_signin: row.total_signin || 0,
+        total_signout: row.total_signout || 0,
+        last_event: row.last_event || "-",
+        last_location: row.last_location || "-",
+        last_activity: formatDate(row.last_activity) || "-",
+      })),
+    }
+  );
+
+  return {
+    filename: `User-wise-attendance-report${
+      company.company_name ? "-" + company.company_name : ""
+    }.xls`,
+    content: await excelFormat(htmlBody),
+    contentType: "application/vnd.ms-excel",
+  };
+};
