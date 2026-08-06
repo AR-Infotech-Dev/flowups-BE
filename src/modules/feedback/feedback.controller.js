@@ -4,11 +4,13 @@ import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { validate } from "#shared/utils/request.validator.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { buildTablePayload } from "#shared/utils/tablePayload.js";
-import Joi from "joi";
 import { env } from "#config/env.js";
 import { DB_PREFIX, query } from "#config/database.js";
 import { getUserCompanyId, isSuperAdminRole } from "#shared/utils/role.utils.js";
 import { reviewRatingSummary } from "./feedback.model.js";
+import Joi from "joi";
+import crypto from "node:crypto";
+
 const MODULE_TABLE = "ticket_feedback";
 const default_columns = {
   client_id: {
