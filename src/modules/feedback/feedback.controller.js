@@ -60,12 +60,14 @@ export const list = async (req, res) => {
       custom_columns,
     });
     const { select, where, values, join, other } = filterData;
+
     const scopedCompanyId = isSuperAdminRole(req.user.adminID)
       ? null
-      : getUserCompanyId(req.user.adminID);
+      : getUserCompanyId(req.user);
+
 
     if (scopedCompanyId) {
-      where.push("t.company_id = ?");
+      where.push("ad.company_id = ?");
       values.push(scopedCompanyId);
     };
 

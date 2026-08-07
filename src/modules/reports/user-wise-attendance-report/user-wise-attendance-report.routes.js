@@ -5,19 +5,7 @@ import * as UserWiseAttendanceReportController from "./user-wise-attendance-repo
 
 const userWiseAttendanceReportRoutes = express.Router();
 
-const permissions = [
-  "reports",
-  "/reports/user-wise-attendance",
-];
-
-userWiseAttendanceReportRoutes.post(
-  "/",
-  UserWiseAttendanceReportController.list
-);
-
-userWiseAttendanceReportRoutes.post(
-  "/export-excel",
-  UserWiseAttendanceReportController.exportExcel
-);
-
+const permissions = [ "reports", "/reports/user-wise-attendance", ];
+userWiseAttendanceReportRoutes.post( "/", UserWiseAttendanceReportController.list );
+userWiseAttendanceReportRoutes.post( "/export-excel", UserWiseAttendanceReportController.exportExcel );
 export default userWiseAttendanceReportRoutes;

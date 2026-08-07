@@ -31,8 +31,5 @@ reportsRoutes.post("/customer-wise-report-excel", requirePermission(["customers"
 // PRODUCTS
 reportsRoutes.use("/product-expiry", tenantDbMiddleware, productExpiryReportRoutes);
 
-reportsRoutes.use(
-  "/user-wise-attendance",
-  userWiseAttendanceReportRoutes
-);
+reportsRoutes.use( "/user-wise-attendance", tenantDbMiddleware,userWiseAttendanceReportRoutes );
 export default reportsRoutes;
