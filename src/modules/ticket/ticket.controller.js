@@ -38,6 +38,7 @@ import { ticketValidationRules } from "./ticket.validation.js";
 
 export const list = async (req, res) => {
   try {
+
     const { viewAll, client_id = null, page = 1, order_by = "ticket_id", order = "DESC", searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
     const limit = env.perPage || 10;
     const currentPage = Number(page) || 1;
@@ -93,9 +94,16 @@ export const list = async (req, res) => {
     const total = await countTickets({ where, values, join: needsJoinedCount ? join : [], other });
     const totalPages = Math.ceil(total / limit);
     const end = Math.min(start + limit, total);
-    const rows = getAll === "Y"
+    const rows = (getAll === "Y")
       ? await listTickets({ select, where, values, join, other })
       : await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
+
+    // let rows = [];
+    // if (getAll === "Y") {
+    //   rows = await listTickets({ select, where, values, join, other })
+    // } else {
+    //   rows = await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
+    // }
 
     if (shouldFilterByAssignee && rows.length) {
       const historyRows = await getTicketVisibilityRows(rows.map((row) => row.ticket_id), userId);

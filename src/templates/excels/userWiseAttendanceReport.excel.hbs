@@ -1,0 +1,39 @@
+<tr>
+  <td class="top-title" colspan="{{spreadsheetColumnCount}}">{{reportTitle}}</td>
+</tr>
+{{{spacerRow}}}
+<tr style="height:72px;">
+  <th class="ticket-header-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">Sr No</th>
+  <th class="ticket-header-cell" style="width: 200px; min-width: 200px ;max-width: 200px;">Employee</th>
+  <th class="ticket-header-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">Logs</th>
+  <th class="ticket-header-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">Sign In</th>
+  <th class="ticket-header-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">Sign Out</th>
+  {{#each dateColumns}}
+  <th class="ticket-header-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">{{label}}<br />{{weekday}}</th>
+  {{/each}}
+</tr>
+{{#if hasSupportRows}}
+{{#each supportRows}}
+<tr style="height:42px;">
+  <td class="ticket-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">{{srNo}}</td>
+  <td class="ticket-cell" style="width: 200px; min-width: 200px ;max-width: 200px; text-align:left;"><b>{{user_name}}</b><br /><span
+      style="font-size:10px; color:#64748b;">{{username}}</span></td>
+  <td class="ticket-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">{{total_logs}}</td>
+  <td class="ticket-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">{{total_signin}}</td>
+  <td class="ticket-cell" style="width: 70px; min-width: 70px ;max-width: 70px;">{{total_signout}}</td>
+  {{#each dayValues}}
+  <td class="ticket-cell" style="width: 70px; min-width: 70px ;max-width: 70px; {{{badgeStyle}}}">
+    <span style="{{{badgeStyle}}}">{{code}}</span>
+  </td>
+  {{/each}}
+</tr>
+{{/each}}
+{{else}}
+<tr>
+  <td class="empty-ticket-cell" colspan="{{spreadsheetColumnCount}}">No attendance records found for this period.</td>
+</tr>
+{{/if}}
+<tr style="height: 42;">
+  <td class="ticket-cell" colspan="{{spreadsheetColumnCount}}">Legend: P = Present, A = Absent, W = Weekend, L = Leave,
+    MSO = Missing Sign Out</td>
+</tr>

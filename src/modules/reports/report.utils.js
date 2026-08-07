@@ -39,3 +39,19 @@ export const sendExcelDownload = (res, attachment = {}) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.end(content);
 };
+export const formatDateTime = (value) => {
+  if (!value) return "-";
+
+  const date = new Date(String(value).replace(" ", "T"));
+
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+};

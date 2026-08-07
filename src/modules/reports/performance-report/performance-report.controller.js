@@ -327,7 +327,7 @@ const getTickets = async ({ body, user }) => {
         FROM ${DB_PREFIX}ticket_work_logs
         WHERE status = 'active'
         GROUP BY ticket_id
-      ) workLogs ON workLogs.ticket_id = t.ticket_id
+      ) workLogs ON workLogs.ticket_id = t.ticket_id 
       ${whereSql}
       ORDER BY ${orderColumn} ${selectedOrder}
       LIMIT ${safeLimit} OFFSET ${start}
@@ -351,54 +351,194 @@ const getPerformanceTicketsForExport = async ({ body, user }) => {
   const { whereSql, values } = buildTicketWhere({ body, user, includeSearch: true });
 
   return query(
-    `
-      SELECT
-        t.ticket_id,
-        t.ticket_no,
-        t.description,
-        t.created_date,
-        t.created_date AS assigned_date,
-        t.start_date,
-        t.due_date,
-        t.contact_person,
-        t.contact_no,
-        t.product_name,
-        t.product_serial_number,
-        t.product_add_ons,
-        t.expected_minutes,
-        t.amc_call,
-        t.call_direction,
-        c.name AS customer_name,
-        priority.categoryName AS ticket_priority,
-        status.categoryName AS ticket_status,
-        queryType.categoryName AS query_type,
-        assignee.name AS assignee_name,
-        COALESCE(workLogs.resolution_time, 0) AS resolution_time,
-        COALESCE(workLogs.resolution_time_seconds, 0) AS resolution_time_seconds
-      FROM ${DB_PREFIX}tickets t
-      LEFT JOIN ${DB_PREFIX}customer c ON t.client_id = c.customer_id
-      LEFT JOIN ${DB_PREFIX}categories priority ON t.ticket_priority = priority.category_id
-      LEFT JOIN ${DB_PREFIX}categories status ON t.ticket_status = status.category_id
-      LEFT JOIN ${DB_PREFIX}categories queryType ON t.query_type = queryType.category_id
-      LEFT JOIN ${DB_PREFIX}admin assignee ON t.assignee = assignee.adminID
-      LEFT JOIN (
-        SELECT
-          ticket_id,
-          ROUND(SUM(COALESCE(spent_minutes, 0)), 2) AS resolution_time,
-          SUM(
+    `SELECT
+    t.ticket_id,
+    t.ticket_no,
+    t.description,
+    t.created_date,
+    t.created_date AS assigned_date,
+    t.start_date,
+    t.due_date,
+    t.contact_person,
+    t.contact_no,
+    t.product_name,
+    t.product_serial_number,
+    t.product_add_ons,
+    t.expected_minutes,
+    t.amc_call,
+    t.call_direction,
+
+    c.name AS customer_name,
+    priority.categoryName AS ticket_priority,
+    status.categoryName AS ticket_status,
+    queryType.categoryName AS query_type,
+    assignee.name AS assignee_name,
+
+    COALESCE(workLogs.resolution_time, 0) AS resolution_time,
+    COALESCE(workLogs.resolution_time_seconds, 0) AS resolution_time_seconds,
+    COALESCE(workLogs.work_logs, JSON_ARRAY()) AS work_logs,
+    COALESCE(ticketHistory.history, JSON_ARRAY()) AS history
+
+  FROM ${DB_PREFIX}tickets t
+
+  LEFT JOIN ${DB_PREFIX}customer c
+    ON t.client_id = c.customer_id
+
+  LEFT JOIN ${DB_PREFIX}categories priority
+    ON t.ticket_priority = priority.category_id
+
+  LEFT JOIN ${DB_PREFIX}categories status
+    ON t.ticket_status = status.category_id
+
+  LEFT JOIN ${DB_PREFIX}categories queryType
+    ON t.query_type = queryType.category_id
+
+  LEFT JOIN ${DB_PREFIX}admin assignee
+    ON t.assignee = assignee.adminID
+
+  LEFT JOIN (
+    SELECT
+      twl.ticket_id,
+
+      ROUND(
+        SUM(COALESCE(twl.spent_minutes, 0)),
+        2
+      ) AS resolution_time,
+
+      SUM(
+        CASE
+          WHEN twl.work_start_at IS NOT NULL
+            AND twl.work_end_at IS NOT NULL
+          THEN TIMESTAMPDIFF(
+            SECOND,
+            twl.work_start_at,
+            twl.work_end_at
+          )
+          ELSE ROUND(COALESCE(twl.spent_minutes, 0) * 60)
+        END
+      ) AS resolution_time_seconds,
+
+      JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'work_log_id', twl.work_log_id,
+          'employee_id', twl.employee_id,
+          'employee_name', tlcb.name,
+          'work_start_at', twl.work_start_at,
+          'work_end_at', twl.work_end_at,
+          'spent_minutes', COALESCE(twl.spent_minutes, 0),
+          'work_details', twl.work_details,
+          'work_status', twl.work_status,
+          'created_date', twl.created_date
+        )
+      ) AS work_logs
+
+    FROM ${DB_PREFIX}ticket_work_logs twl
+
+    LEFT JOIN ${DB_PREFIX}admin tlcb
+      ON twl.employee_id = tlcb.adminID
+
+    WHERE twl.status = 'active'
+
+    GROUP BY twl.ticket_id
+  ) workLogs
+    ON workLogs.ticket_id = t.ticket_id
+
+  LEFT JOIN (
+    SELECT
+      th.ticket_id,
+
+      JSON_ARRAYAGG(
+        JSON_OBJECT(
+          'action_type', th.action_type,
+          'field_name', th.field_name,
+          'old_value', th.old_value,
+          'old_label',
             CASE
-              WHEN work_start_at IS NOT NULL AND work_end_at IS NOT NULL
-                THEN TIMESTAMPDIFF(SECOND, work_start_at, work_end_at)
-              ELSE ROUND(COALESCE(spent_minutes, 0) * 60)
-            END
-          ) AS resolution_time_seconds
-        FROM ${DB_PREFIX}ticket_work_logs
-        WHERE status = 'active'
-        GROUP BY ticket_id
-      ) workLogs ON workLogs.ticket_id = t.ticket_id
-      ${whereSql}
-      ORDER BY ${orderColumn} ${selectedOrder}
-    `,
+              WHEN th.field_name IN (
+                'ticket_status',
+                'ticket_priority',
+                'query_type'
+              )
+                THEN COALESCE(c_old.categoryName, th.old_value)
+
+              WHEN th.field_name IN (
+                'assignee',
+                'changed_by'
+              )
+                THEN COALESCE(a_old.name, th.old_value)
+
+              ELSE th.old_value
+            END,
+
+          'new_value', th.new_value,
+          'new_label',
+            CASE
+              WHEN th.field_name IN (
+                'ticket_status',
+                'ticket_priority',
+                'query_type'
+              )
+                THEN COALESCE(c_new.categoryName, th.new_value)
+
+              WHEN th.field_name IN (
+                'assignee',
+                'changed_by'
+              )
+                THEN COALESCE(a_new.name, th.new_value)
+
+              ELSE th.new_value
+            END,
+
+          'changed_by', th.changed_by,
+          'changed_by_name', cb.name,
+          'created_date', th.created_date,
+          'comment', th.comment
+        )
+      ) AS history
+
+    FROM ${DB_PREFIX}ticket_history th
+
+    LEFT JOIN ${DB_PREFIX}admin cb
+      ON th.changed_by = cb.adminID
+
+    LEFT JOIN ${DB_PREFIX}categories c_old
+      ON th.field_name IN (
+        'ticket_status',
+        'ticket_priority',
+        'query_type'
+      )
+      AND CAST(th.old_value AS UNSIGNED) = c_old.category_id
+
+    LEFT JOIN ${DB_PREFIX}categories c_new
+      ON th.field_name IN (
+        'ticket_status',
+        'ticket_priority',
+        'query_type'
+      )
+      AND CAST(th.new_value AS UNSIGNED) = c_new.category_id
+
+    LEFT JOIN ${DB_PREFIX}admin a_old
+      ON th.field_name IN (
+        'assignee',
+        'changed_by'
+      )
+      AND CAST(th.old_value AS UNSIGNED) = a_old.adminID
+
+    LEFT JOIN ${DB_PREFIX}admin a_new
+      ON th.field_name IN (
+        'assignee',
+        'changed_by'
+      )
+      AND CAST(th.new_value AS UNSIGNED) = a_new.adminID
+      GROUP BY th.ticket_id 
+      ORDER BY MAX(th.history_id) DESC
+  ) ticketHistory
+    ON ticketHistory.ticket_id = t.ticket_id
+
+  ${whereSql}
+
+  ORDER BY ${orderColumn} ${selectedOrder}
+`,
     values
   );
 };
@@ -519,9 +659,6 @@ export const exportUserPerformanceExcel = async (req, res) => {
       getSummary({ body, user: req.user }),
       getPerformanceTicketsForExport({ body, user: req.user }),
     ]);
-    // console.log(tickets);
-    // console.log(summary);
-
     const attachment = await buildPerformanceExcelAttachment({ filters: body, summary, tickets, user: userDetails });
     return sendExcelDownload(res, attachment);
   } catch (error) {
