@@ -26,6 +26,7 @@ const getUserWiseAttendance = async ({ companyId, body, isExport = false, }) => 
     "l.company_id=a.company_id"
   ];
   const attendanceValues = [];
+
   if (fromDate) {
     attendanceJoin.push(
       "DATE(l.created_date)>=?"
@@ -119,7 +120,6 @@ const getUserWiseAttendance = async ({ companyId, body, isExport = false, }) => 
   if (userIds.length) {
     const placeholders = userIds.map(() => "?").join(",");
     const dayWhere = [
-      // "l.status='active'",
       "l.company_id=?",
       `l.adminID IN (${placeholders})`,
     ];
@@ -213,7 +213,7 @@ export const companyUserAttendanceReport = async (req, res) => {
       ? req.user.company_id
       : body.company_id;
 
-    if (!companyId) {
+    if (!isSuperAdmin(req.user) && !companyId) {
       return failureResponse(res, {
         code: 2001,
         httpStatus: 400,
