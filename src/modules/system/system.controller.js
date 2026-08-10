@@ -107,6 +107,9 @@ export const getFreeTextSearch = async (req, res) => {
     if (tableName === "categories") {
       where.push(`t.is_parent = 'yes' `);
     }
+    if (tableName === "user_role_master") {
+      where.push(`t.slug != 'super_admin'`);
+    }
     const result = await CommonModel.GetMasterListDetails({ select: list, table: tableName, where, values });
     if (result.length) {
       return successResponse(res, {
