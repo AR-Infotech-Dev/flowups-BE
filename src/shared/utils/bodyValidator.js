@@ -13,10 +13,13 @@ export const validateBody = (body = {}, fieldRules = {}) => {
       label = key,
       required = false,
       type = "string",
+      min,
+      max,
     } = rule;
 
     const value = body[key];
 
+    // Required validation
     if (required && isEmpty(value)) {
       return {
         isValid: false,
@@ -26,12 +29,16 @@ export const validateBody = (body = {}, fieldRules = {}) => {
       };
     }
 
-    if (value === undefined) {
+    // Optional field not provided
+    if (isEmpty(value)) {
       continue;
     }
 
-    if (!isEmpty(value)) {
-      if (type === "email" && !EMAIL_REGEX.test(String(value).trim())) {
+    // Email validation
+    if (type === "email") {
+      const email = String(value).trim();
+
+      if (!EMAIL_REGEX.test(email)) {
         return {
           isValid: false,
           message: `${label} must be a valid email`,
@@ -40,7 +47,31 @@ export const validateBody = (body = {}, fieldRules = {}) => {
         };
       }
 
-      if (type === "date" && Number.isNaN(Date.parse(value))) {
+      if (min !== undefined && email.length < min) {
+        return {
+          isValid: false,
+          message: `${label} must contain at least ${min} characters`,
+          field: key,
+          data: {},
+        };
+      }
+
+      if (max !== undefined && email.length > max) {
+        return {
+          isValid: false,
+          message: `${label} must not exceed ${max} characters`,
+          field: key,
+          data: {},
+        };
+      }
+
+      data[key] = email;
+      continue;
+    }
+
+    // Date validation
+    if (type === "date") {
+      if (Number.isNaN(Date.parse(value))) {
         return {
           isValid: false,
           message: `${label} must be a valid date`,
@@ -49,7 +80,15 @@ export const validateBody = (body = {}, fieldRules = {}) => {
         };
       }
 
-      if (type === "number" && Number.isNaN(Number(value))) {
+      data[key] = value;
+      continue;
+    }
+
+    // Number validation
+    if (type === "number") {
+      const numberValue = Number(value);
+
+      if (!Number.isFinite(numberValue)) {
         return {
           isValid: false,
           message: `${label} must be a valid number`,
@@ -57,13 +96,62 @@ export const validateBody = (body = {}, fieldRules = {}) => {
           data: {},
         };
       }
+
+      if (min !== undefined && numberValue < min) {
+        return {
+          isValid: false,
+          message: `${label} must be at least ${min}`,
+          field: key,
+          data: {},
+        };
+      }
+
+      if (max !== undefined && numberValue > max) {
+        return {
+          isValid: false,
+          message: `${label} must not be greater than ${max}`,
+          field: key,
+          data: {},
+        };
+      }
+
+      data[key] = numberValue;
+      continue;
     }
 
-    data[key] = body[key];
+    // String validation
+    if (type === "string") {
+      const stringValue = String(value).trim();
+
+      if (min !== undefined && stringValue.length < min) {
+        return {
+          isValid: false,
+          message: `${label} must contain at least ${min} characters`,
+          field: key,
+          data: {},
+        };
+      }
+
+      if (max !== undefined && stringValue.length > max) {
+        return {
+          isValid: false,
+          message: `${label} must not exceed ${max} characters`,
+          field: key,
+          data: {},
+        };
+      }
+
+      data[key] = stringValue;
+      continue;
+    }
+
+    data[key] = value;
   }
 
   return {
     isValid: true,
+    message: "Validation successful",
+    field: null,
     data,
   };
 };

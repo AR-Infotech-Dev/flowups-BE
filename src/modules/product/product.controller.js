@@ -8,15 +8,7 @@ import { env } from "#config/env.js";
 
 const MODULE_TABLE = "products";
 
-const default_columns = {
-  // product_type: {
-  //   table: "categories",
-  //   alias: "pt",
-  //   column: "categoryName",
-  //   key2: "category_id",
-  //   select: "",
-  // },
-};
+const default_columns = {};
 
 const custom_columns = {
   company_id: {
@@ -46,6 +38,8 @@ const productValidationRules = {
   product_id: { label: "Product ID", type: "number" },
   product_name: { label: "Product Name", required: true },
   product_type: { label: "Product Type", required: true },
+  rate: { label: "Product rate", type: "number", required: true, min: 0 },
+  gst_rate: { label: "Product GST rate", type: "number", required: true, min: 0, max: 100 },
   product_description: { label: "Description" },
   company_id: { label: "Company", type: "number" },
   created_by: { label: "Created By", type: "number" },
@@ -65,7 +59,7 @@ export const list = async (req, res) => {
 
     // const limit = 10;
     const limit = env.perPage;
-    
+
     const currentPage = Number(page) || 1;
     const start = (currentPage - 1) * limit;
 
@@ -208,7 +202,6 @@ export const getProductDetails = async (req, res) => {
         if (!isSuperAdmin(req.user) && req.user.company_id) {
           where.company_id = req.user.company_id;
         }
-
         const result = await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
           data,

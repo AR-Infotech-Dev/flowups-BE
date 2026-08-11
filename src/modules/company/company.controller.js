@@ -499,7 +499,6 @@ export const getCompanyDetails = async (req, res) => {
         dataforsync.modified_by = req.user.adminID;
         dataforsync.modified_date = toMysqlDateTime();
         dataforsync.company_id = company_id;
-        console.log('dataforsync : ', dataforsync);
 
         const result = await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
