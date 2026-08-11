@@ -59,7 +59,7 @@ export const getMasterDetails = async (table = "", select = "*", where = {}, joi
     if (conditions.length) {
         sql += ` WHERE ${conditions.join(" AND ")}`;
     }
-    printSql(sql, values)
+    // printSql(sql, values)
     return await query(sql, values);
 };
 export const getSpecificDetails = async (table = "", select = "*", where = {}) => {
@@ -174,7 +174,7 @@ export const GetMasterListDetails = async ({ select = "*", table = "", where = [
         const safeStart = Number(start) || 0;
         sql += ` LIMIT ${safeLimit} OFFSET ${safeStart}`;
     }
-    
+    // printSql(sql, params);
     const rows = await query(sql, params);
     return rows;
 };

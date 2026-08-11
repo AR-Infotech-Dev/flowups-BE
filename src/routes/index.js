@@ -19,6 +19,8 @@ import bootstrapRoutes from "#modules/bootstrap/bootstrap.routes.js";
 import amcReminderRoutes from "#modules/amc-reminders/amc-reminder.routes.js";
 import reportsRoutes from "#modules/reports/reports.routes.js";
 import subscriptionRoutes from "#modules/subscriptions/subscriptions.routes.js";
+import quotationRoutes from "#modules/quotation/quotation.routes.js";
+import leadRoutes from "#modules/leads/leads.routes.js";
 import * as ticketVisitsController from "#modules/ticket/ticket-visits.controller.js";
 
 
@@ -43,6 +45,8 @@ router.use('/amctickets', verifyToken, amcticketRoutes);
 router.use('/amc-reminders', verifyToken, amcReminderRoutes);
 router.use('/reports', verifyToken, reportsRoutes);
 router.use("/subscriptions", verifyToken, subscriptionRoutes);
+router.use("/quotations", verifyToken, quotationRoutes);
+router.use("/leads", verifyToken, leadRoutes);
 router.use('/permissions', verifyToken, moduleAccessRoutes);
 router.use("/notifications", verifyToken, notificationRoutes);
 router.use("/dashboard", verifyToken, dashboardRoutes);
