@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import path from "path";
+import fs from "fs/promises";
 import { env } from "#config/env.js";
 import { query, DB_PREFIX } from "#config/database.js";
 import { renderTemplate } from "./templateMaker.js";
@@ -84,7 +85,7 @@ export const testSmtpConnection = async (config = {}) => {
 
         await transporter.verify();
         const html = await renderTemplate("smtpConnectionTest", "email");
-        const formattedHtml = await mailFormat(config, html);
+        const { html: formattedHtml, logoAttachment } = await formatMail(config, html);
 
         await transporter.sendMail({
             from: `${senderName} <${senderEmail}>`,
@@ -92,6 +93,7 @@ export const testSmtpConnection = async (config = {}) => {
             subject: "SMTP Connection Test",
             text: "SMTP configuration successful.",
             html: formattedHtml,
+            attachments: logoAttachment ? [logoAttachment] : [],
         });
 
         return {
@@ -159,8 +161,11 @@ const getTransporter = async (company_id = null) => {
 export const sendEmail = async ({ to, subject, html, text = "", company_id = null, attachments = [], }) => {
     try {
         const { transporter, from, companyConfig } = await getTransporter(company_id);
-        const formattedHtml = await mailFormat(companyConfig, html);
+        const { html: formattedHtml, logoAttachment } = await formatMail(companyConfig, html);
         const fallbackText = text || String(html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+        const emailAttachments = logoAttachment
+            ? [...attachments, logoAttachment]
+            : attachments;
 
         const info = await transporter.sendMail({
             from,
@@ -168,7 +173,7 @@ export const sendEmail = async ({ to, subject, html, text = "", company_id = nul
             subject,
             text: fallbackText,
             html: formattedHtml,
-            attachments,
+            attachments: emailAttachments,
         });
         return {
             success: true,
@@ -233,21 +238,41 @@ const buildLogoUrl = (logoPath = "") => {
     return baseUrl ? `${baseUrl}/${normalizedPath}` : `/${normalizedPath}`;
 };
 
-const mailFormat = async (companyConfig = {}, html = '') => {
+const getInlineLogo = async (logoPath = "") => {
+    const rawLogoPath = String(logoPath || "").trim();
+    if (!rawLogoPath || /^https?:\/\//i.test(rawLogoPath)) return null;
+
+    const cleanPath = rawLogoPath.replace(/\\/g, "/").replace(/^.*?public\//, "").replace(/^\/+/, "");
+    const absolutePath = path.resolve(process.cwd(), "public", cleanPath);
+    const publicRoot = path.resolve(process.cwd(), "public");
+    if (!absolutePath.startsWith(`${publicRoot}${path.sep}`)) return null;
+
+    try {
+        await fs.access(absolutePath);
+        return {
+            filename: path.basename(absolutePath),
+            path: absolutePath,
+            cid: "company-logo@flowups",
+        };
+    } catch {
+        return null;
+    }
+};
+
+const formatMail = async (companyConfig = {}, html = '') => {
     const config = companyConfig || {};
     let mainMailBody = String(html || "");
     mainMailBody = mainMailBody.replace(/{appName}/g, env.appName);
     mainMailBody = mainMailBody.replace(/{companyName}/g, config.company_name);
 
-    const logoUrl = buildLogoUrl(config.email_logo);
-
-    console.log("logoUrl : ",logoUrl);
-    console.log("config.email_logo : ",config.email_logo);
-
-    return renderTemplate("mailLayout", "email", {
+    const logoAttachment = await getInlineLogo(config.email_logo);
+    const logoUrl = logoAttachment ? `cid:${logoAttachment.cid}` : buildLogoUrl(config.email_logo);
+    const formattedHtml = await renderTemplate("mailLayout", "email", {
         appName: env.appName,
         appLink: env.appLink,
         logoPath: logoUrl,
         mainMailBody,
     });
+
+    return { html: formattedHtml, logoAttachment };
 };
