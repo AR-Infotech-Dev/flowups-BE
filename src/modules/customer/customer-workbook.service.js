@@ -2,7 +2,7 @@ import { DB_PREFIX, getDbPool, query } from "#config/database.js";
 import { getActiveDb } from "#config/db.context.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { isSuperAdminRole } from "#shared/utils/role.utils.js";
-import { findCustomerProductSerialConflicts, getCustomerTableColumns } from "./customer.model.js";
+import { getCustomerTableColumns } from "./customer.model.js";
 import {
   normalizeCustomerProducts,
   normalizeImportDate,
@@ -77,6 +77,86 @@ const getLinkedRows = (lookup, customerRow) => {
   return lookup.get(id ? `id:${id}` : `code:${code}`) || [];
 };
 
+const loadExistingCustomersById = async ({ executor, customerIds = [], user }) => {
+  const lookup = new Map();
+  const uniqueIds = [...new Set(customerIds.map(normalizeId).filter(Boolean))];
+  const userCompanyId = isSuperAdminRole(user) ? null : normalizeId(user.company_id);
+
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    const ids = uniqueIds.slice(index, index + 500);
+    const placeholders = ids.map(() => "?").join(",");
+    const params = [...ids];
+    const companySql = userCompanyId ? " AND company_id = ?" : "";
+    if (userCompanyId) params.push(userCompanyId);
+    const rows = await queryWith(
+      executor,
+      `SELECT * FROM ${DB_PREFIX}customer WHERE customer_id IN (${placeholders})${companySql}`,
+      params,
+    );
+    rows.forEach((row) => lookup.set(Number(row.customer_id), row));
+  }
+  return lookup;
+};
+
+const loadExistingContactsByCustomerId = async ({ executor, customerIds = [] }) => {
+  const lookup = new Map();
+  const uniqueIds = [...new Set(customerIds.map(normalizeId).filter(Boolean))];
+  for (let index = 0; index < uniqueIds.length; index += 500) {
+    const ids = uniqueIds.slice(index, index + 500);
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = await queryWith(
+      executor,
+      `SELECT * FROM ${DB_PREFIX}customer_contacts WHERE customer_id IN (${placeholders}) ORDER BY customer_id, is_primary DESC, contact_id`,
+      ids,
+    );
+    rows.forEach((row) => {
+      const customerId = Number(row.customer_id);
+      const contacts = lookup.get(customerId) || [];
+      contacts.push(row);
+      lookup.set(customerId, contacts);
+    });
+  }
+  return lookup;
+};
+
+const loadProductSerialIndex = async (executor) => {
+  const rows = await queryWith(
+    executor,
+    `SELECT customer_id, name, customer_products FROM ${DB_PREFIX}customer WHERE customer_products IS NOT NULL AND customer_products <> '[]'`,
+  );
+  const index = new Map();
+  rows.forEach((customer) => {
+    normalizeCustomerProducts(customer.customer_products).forEach((product) => {
+      const serial = String(product?.serial_number || "").trim().toLowerCase();
+      if (!serial) return;
+      const entries = index.get(serial) || [];
+      entries.push({
+        serial_number: product.serial_number,
+        customer_id: Number(customer.customer_id),
+        customer_name: customer.name,
+        product_name: product.product_name || "",
+      });
+      index.set(serial, entries);
+    });
+  });
+  return index;
+};
+
+const findSerialConflictsInIndex = ({ serialIndex, serialNumbers = [], excludeCustomerId = null }) => {
+  const conflicts = [];
+  const seen = new Set();
+  serialNumbers.forEach((serialNumber) => {
+    const serial = String(serialNumber || "").trim().toLowerCase();
+    if (!serial || seen.has(serial)) return;
+    seen.add(serial);
+    (serialIndex.get(serial) || []).forEach((entry) => {
+      if (excludeCustomerId && Number(entry.customer_id) === Number(excludeCustomerId)) return;
+      conflicts.push(entry);
+    });
+  });
+  return conflicts;
+};
+
 const readCell = (row, key, { newRecord = false } = {}) => {
   if (!Object.prototype.hasOwnProperty.call(row, key)) return undefined;
   const value = row[key];
@@ -105,20 +185,14 @@ const getIncomingPrimary = (contactRows = []) => {
   return activeRows.find((row) => normalizeYesNo(row.is_primary) === "yes") || activeRows[0] || null;
 };
 
-const findExistingCustomer = async ({ executor, row, user, contactRows }) => {
+const findExistingCustomer = async ({ executor, row, user, contactRows, existingCustomersById }) => {
   const customerId = normalizeId(row.customer_id);
   const userCompanyId = isSuperAdminRole(user) ? normalizeId(row.company_id) : normalizeId(user.company_id);
 
   if (customerId) {
-    const params = [customerId];
-    let companySql = "";
-    if (userCompanyId) {
-      companySql = " AND company_id = ?";
-      params.push(userCompanyId);
-    }
-    const rows = await queryWith(executor, `SELECT * FROM ${DB_PREFIX}customer WHERE customer_id = ?${companySql} LIMIT 1`, params);
-    if (!rows.length) throw new Error(`Customer ID ${customerId} was not found or is outside your company.`);
-    return rows[0];
+    const existing = existingCustomersById?.get(customerId) || null;
+    if (!existing) throw new Error(`Customer ID ${customerId} was not found or is outside your company.`);
+    return existing;
   }
 
   const name = String(row.name || "").trim();
@@ -245,7 +319,7 @@ const parseAddOns = (value) => {
   return String(value || "").split(/[,+|]/).map((item) => item.trim()).filter(Boolean);
 };
 
-const buildProductState = async ({ customerId, existingProducts, rows }) => {
+const buildProductState = async ({ customerId, existingProducts, rows, serialIndex }) => {
   const products = normalizeCustomerProducts(existingProducts).map((product, index) => ({
     ...product,
     __rowKey: customerId ? `${customerId}:${index + 1}` : "",
@@ -302,7 +376,8 @@ const buildProductState = async ({ customerId, existingProducts, rows }) => {
     serials.add(serial);
   }
 
-  const conflicts = changed ? await findCustomerProductSerialConflicts({
+  const conflicts = changed ? findSerialConflictsInIndex({
+    serialIndex,
     serialNumbers: products.map((product) => product.serial_number),
     excludeCustomerId: customerId,
   }) : [];
@@ -444,10 +519,16 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
     preview: dryRun,
   };
 
-  for (const customerRow of customerRows) {
-    const dbPool = getActiveDb() || getDbPool();
-    const connection = await dbPool.getConnection();
-    try {
+  const customerIds = customerRows.map((row) => normalizeId(row.customer_id)).filter(Boolean);
+  const dbPool = getActiveDb() || getDbPool();
+  const connection = await dbPool.getConnection();
+
+  try {
+    const existingCustomersById = await loadExistingCustomersById({ executor: connection, customerIds, user });
+    const existingContactsByCustomerId = await loadExistingContactsByCustomerId({ executor: connection, customerIds });
+    const serialIndex = await loadProductSerialIndex(connection);
+    for (const customerRow of customerRows) {
+      try {
       if (normalizeAction(customerRow.action) === "DELETE") {
         throw new Error("Customer deletion is not allowed from import. Delete it from the application.");
       }
@@ -461,14 +542,14 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
         throw new Error("Duplicate Customer ID or Customer Code found in the Customers sheet.");
       }
 
-      await connection.beginTransaction();
+      if (!dryRun) await connection.beginTransaction();
       const contactRows = getLinkedRows(contactLookup, customerRow);
       const productRows = getLinkedRows(productLookup, customerRow);
       const repeatedSerial = productRows
         .map((row) => String(row.serial_number || "").trim().toLowerCase())
         .find((serial) => serial && duplicateWorkbookSerials.has(serial));
       if (repeatedSerial) throw new Error(`Duplicate product serial number in workbook: ${repeatedSerial}`);
-      const existing = await findExistingCustomer({ executor: connection, row: customerRow, user, contactRows });
+      const existing = await findExistingCustomer({ executor: connection, row: customerRow, user, contactRows, existingCustomersById });
       assertRowVersion(customerRow, existing);
       const newCustomer = !existing;
       const companyId = existing?.company_id || (isSuperAdminRole(user) ? normalizeId(customerRow.company_id) : normalizeId(user.company_id));
@@ -493,13 +574,14 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
       }
 
       const existingContacts = existing
-        ? await queryWith(connection, `SELECT * FROM ${DB_PREFIX}customer_contacts WHERE customer_id = ? ORDER BY is_primary DESC, contact_id`, [existing.customer_id])
+        ? existingContactsByCustomerId.get(Number(existing.customer_id)) || []
         : [];
       const contactState = buildContactState(existingContacts, contactRows, newCustomer);
       const productState = await buildProductState({
         customerId: existing?.customer_id || null,
         existingProducts: existing?.customer_products || [],
         rows: productRows,
+        serialIndex,
       });
       const primaryContact = contactState.contacts.find((contact) => contact.is_primary === "y") || null;
       const hasContactChanges = contactState.operations.length > 0;
@@ -511,7 +593,6 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
           if (operation.type === "update" && Object.keys(operation.changes).length) result.contacts.updated += 1;
           if (operation.type === "delete") result.contacts.deleted += 1;
         });
-        await connection.rollback();
       } else if (hasCustomerChanges) {
         const customerId = await writeCustomer({
           connection,
@@ -534,13 +615,16 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
       else if (newCustomer) result.inserted += 1;
       else result.updated += 1;
       if (productState.changed) result.products_updated += 1;
-    } catch (error) {
-      try { await connection.rollback(); } catch { /* connection may already be rolled back */ }
-      result.skipped += 1;
-      result.errors.push({ sheet: "Customers", row: customerRow.__row, message: error.message });
-    } finally {
-      connection.release();
+      } catch (error) {
+        if (!dryRun) {
+          try { await connection.rollback(); } catch { /* connection may already be rolled back */ }
+        }
+        result.skipped += 1;
+        result.errors.push({ sheet: "Customers", row: customerRow.__row, message: error.message });
+      }
     }
+  } finally {
+    connection.release();
   }
 
   const linkedCustomerIds = new Set(customerRows.map((row) => normalizeId(row.customer_id)).filter(Boolean));
@@ -559,4 +643,3 @@ export const importCustomerWorkbook = async ({ workbook, user, dryRun = false })
 
   return result;
 };
-

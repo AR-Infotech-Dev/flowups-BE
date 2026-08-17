@@ -94,6 +94,33 @@ const validateCustomerProductSerials = async ({ products = [], excludeCustomerId
   return { isValid: true };
 };
 
+export const createCustomerRecord = async ({ body = {}, user = {} } = {}) => {
+  const validation = validateBody(body, customerValidationRules);
+  if (!validation.isValid) {
+    return { success: false, message: validation.message };
+  }
+
+  const data = validation.data;
+  const customerContacts = normalizeCustomerContacts(body.customer_contacts ?? body.contact_persons);
+  const customerProducts = normalizeCustomerProducts(body.customer_products ?? body.product_ids);
+  const serialValidation = await validateCustomerProductSerials({ products: customerProducts });
+  if (!serialValidation.isValid) {
+    return { success: false, message: serialValidation.message };
+  }
+
+  delete data.product_ids;
+  delete data.customer_contacts;
+  delete data.contact_persons;
+  data.customer_products = JSON.stringify(customerProducts);
+  data.created_by = user.adminID;
+  data.company_id = user.company_id;
+  data.created_date = toMysqlDateTime();
+
+  const result = await createCustomer(data);
+  await replaceCustomerContacts({ customerId: result.insertId, contacts: customerContacts, user });
+  return { success: true, customerId: result.insertId };
+};
+
 // ======================================================
 // LIST CUSTOMERS
 // ======================================================
@@ -170,43 +197,20 @@ export const getCustomerDetails = async (req, res) => {
 
     switch (method) {
       case "PUT": {
-        const validation = validateBody(req.body, customerValidationRules);
-        if (!validation.isValid) {
+        const creation = await createCustomerRecord({ body: req.body, user: req.user });
+        if (!creation.success) {
           return failureResponse(res, {
             code: 2001,
             httpStatus: 400,
-            message: validation.message,
+            message: creation.message,
           });
         }
-
-        const data = validation.data;
-        const customerContacts = normalizeCustomerContacts(req.body.customer_contacts ?? req.body.contact_persons);
-        const customerProducts = normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids);
-        const serialValidation = await validateCustomerProductSerials({ products: customerProducts });
-        if (!serialValidation.isValid) {
-          return failureResponse(res, {
-            code: 2001,
-            httpStatus: 400,
-            message: serialValidation.message,
-          });
-        }
-
-        delete data.product_ids;
-        delete data.customer_contacts;
-        delete data.contact_persons;
-        data.customer_products = JSON.stringify(customerProducts);
-        data.created_by = req.user.adminID;
-        data.company_id = req.user.company_id;
-        data.created_date = toMysqlDateTime();
-
-        const result = await createCustomer(data);
-        await replaceCustomerContacts({ customerId: result.insertId, contacts: customerContacts, user: req.user });
 
         return successResponse(res, {
           code: 1001,
           httpStatus: 201,
           data: {
-            insertId: result.insertId,
+            insertId: creation.customerId,
           },
         });
       }
@@ -608,4 +612,3 @@ export const downloadExcel = async (req, res) => {
     });
   }
 };
-
