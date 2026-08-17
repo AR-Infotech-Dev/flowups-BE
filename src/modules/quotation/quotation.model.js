@@ -5,7 +5,7 @@ import { MODULE_TABLE } from "./quotation.filter.js";
 export const getQuotationDetails = (quotationId) =>
   CommonModel.getMasterDetails(
     MODULE_TABLE,
-    "t.*, cu.name AS customer_name, ld.name AS lead_name",
+    "t.*, cu.name AS customer_name, cu.email AS customer_email, ld.name AS lead_name, ld.email AS lead_email",
     { "t.quotation_id": quotationId },
     [
       { type: "LEFT JOIN", table: "customer", alias: "cu", key1: "customer_id", key2: "customer_id" },
@@ -49,6 +49,43 @@ export const replaceQuotationLines = async (quotationId, lines = []) => {
   await deleteQuotationLines(quotationId);
   return createQuotationLines(quotationId, lines);
 };
+
+export const createQuotationStatusHistory = (data) =>
+  CommonModel.saveMasterDetails({ table: "quotation_status_history", data });
+
+export const getQuotationStatusHistory = (quotationId) =>
+  query(
+    `SELECT h.*, a.name AS changed_by_name
+     FROM ${DB_PREFIX}quotation_status_history h
+     LEFT JOIN ${DB_PREFIX}admin a ON a.adminID = h.changed_by
+     WHERE h.quotation_id = ?
+     ORDER BY h.changed_date DESC, h.history_id DESC`,
+    [quotationId],
+  );
+
+export const getQuotationFollowups = (quotationId) =>
+  query(
+    `SELECT f.*, a.name AS assigned_to_name
+     FROM ${DB_PREFIX}quotation_followups f
+     LEFT JOIN ${DB_PREFIX}admin a ON a.adminID = f.assigned_to
+     WHERE f.quotation_id = ?
+     ORDER BY f.followup_date DESC, f.followup_id DESC`,
+    [quotationId],
+  );
+
+export const createQuotationFollowup = (data) =>
+  CommonModel.saveMasterDetails({ table: "quotation_followups", data });
+
+export const updateQuotationFollowup = (followupId, data) =>
+  CommonModel.updateMasterDetails({ table: "quotation_followups", data, where: { followup_id: followupId } });
+
+export const closePendingQuotationFollowups = (quotationId, status = "cancelled", modified = {}) =>
+  query(
+    `UPDATE ${DB_PREFIX}quotation_followups
+     SET followup_status = ?, modified_by = ?, modified_date = ?
+     WHERE quotation_id = ? AND followup_status = 'pending'`,
+    [status, modified.modified_by || null, modified.modified_date || null, quotationId],
+  );
 
 export const deleteQuotationDetails = (quotationId) =>
   CommonModel.deleteMasterDetails({ table: MODULE_TABLE, where: { quotation_id: quotationId } });

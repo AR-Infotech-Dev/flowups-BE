@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{quotation.quotation_no}} - Quotation</title>
+  <style>
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #eef2f7;
+      color: #0f172a;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9px;
+      line-height: 1.3
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 8px auto;
+      padding: 8mm 9mm;
+      background: #fff;
+      box-shadow: 0 0 #0000, 0 0 #0000, 0 10px 15px -3px rgb(0, 0, 0, 0.1), 0 4px 6px -4px rgb(0, 0, 0, 0.1);
+
+    }
+
+    .layout-table,
+    .section-table,
+    .signature-table,
+    .footer-table {
+      page-break-inside: avoid;
+      break-inside: avoid
+    }
+
+    .header-table {
+      border-bottom: 1.5px solid #1463df
+    }
+
+    .header-table td {
+      padding: 0 0 6px;
+      vertical-align: top
+    }
+
+    .brand-cell {
+      width: 48%
+    }
+
+    .company-cell {
+      width: 52%;
+      padding-left: 14px !important
+    }
+
+    .brand-logo {
+      display: block;
+      max-width: 125px;
+      max-height: 36px;
+      object-fit: contain
+    }
+
+    .brand-name {
+      margin: 0;
+      color: #1463df;
+      font-size: 23px;
+      line-height: 1
+    }
+
+    .brand-tagline {
+      margin: 2px 0;
+      color: #64748b;
+      font-size: 9px
+    }
+
+    .company-name {
+      margin: 0 0 3px;
+      color: #10224a;
+      font-size: 12px
+    }
+
+    .company-line {
+      margin: 1px 0;
+      color: #334155;
+      font-size: 8px
+    }
+
+    .document-title td {
+      padding: 8px 0 6px;
+      color: #10224a;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: .6px
+    }
+
+    .party-table {
+      margin-bottom: 6px
+    }
+
+    .party-table>tbody>tr>td {
+      width: 50%;
+      padding: 5px 8px;
+      border: 1px solid #cbd5e1;
+      vertical-align: top
+    }
+
+    .party-table>tbody>tr>td+td {
+      border-left: 0
+    }
+
+    .section-title {
+      padding-bottom: 3px;
+      color: #1463df;
+      font-size: 10px;
+      font-weight: 700
+    }
+
+    .details th,
+    .details td {
+      padding: 1.5px 0;
+      border: 0;
+      text-align: left;
+      vertical-align: top
+    }
+
+    .details th {
+      width: 40%;
+      padding-right: 5px;
+      color: #1e293b;
+      font-weight: 600
+    }
+
+    .details td {
+      color: #334155
+    }
+
+    .accent {
+      color: #1463df !important;
+      font-weight: 700
+    }
+
+    .sales-table {
+      margin-bottom: 6px
+    }
+
+    .sales-table th,
+    .sales-table td {
+      padding: 2px 0;
+      text-align: left
+    }
+
+    .sales-table th {
+      width: 110px;
+      color: #1463df
+    }
+
+    .items {
+      table-layout: fixed
+    }
+
+    .items thead {
+      display: table-header-group
+    }
+
+    .items tfoot {
+      display: table-footer-group
+    }
+
+    .items tr {
+      page-break-inside: avoid;
+      break-inside: avoid
+    }
+
+    .items th,
+    .items td {
+      padding: 5px 4px;
+      border: 1px solid #cbd5e1;
+      vertical-align: top
+    }
+
+    .items th {
+      background: #eff6ff;
+      color: #10224a;
+      font-size: 8px;
+      text-align: left
+    }
+
+    .items .number {
+      width: 4%;
+      text-align: center
+    }
+
+    .items .product {
+      width: 20%;
+      font-weight: 700
+    }
+
+    .items .description {
+      width: 30%;
+      color: #334155
+    }
+
+    .items .qty {
+      width: 6%;
+      text-align: center
+    }
+
+    .items .rate {
+      width: 13%;
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .items .tax {
+      width: 10%;
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .items .amount {
+      width: 17%;
+      text-align: right;
+      white-space: nowrap;
+      font-weight: 700
+    }
+
+    .summary-table {
+      margin-top: 6px;
+      page-break-inside: avoid;
+      break-inside: avoid
+    }
+
+    .summary-table>tbody>tr>td {
+      width: 55%;
+      padding: 6px 8px;
+      border: 1px solid #cbd5e1;
+      vertical-align: top
+    }
+
+    .summary-table>tbody>tr>td+td {
+      width: 45%;
+      border-left: 0
+    }
+
+    .copy-title {
+      margin: 0 0 3px;
+      color: #1463df;
+      font-size: 9px
+    }
+
+    .copy-text {
+      margin: 0;
+      color: #334155;
+      white-space: pre-line
+    }
+
+    .terms {
+      margin: 0;
+      padding-left: 13px;
+      color: #334155
+    }
+
+    .terms li {
+      margin: 1px 0
+    }
+
+    .copy-spacer {
+      height: 7px
+    }
+
+    .totals th,
+    .totals td {
+      padding: 2px 0;
+      border: 0;
+      text-align: left
+    }
+
+    .totals td {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .totals .grand th,
+    .totals .grand td {
+      padding-top: 5px;
+      border-top: 1px solid #cbd5e1;
+      color: #1463df;
+      font-size: 11px
+    }
+
+    .words-row td {
+      padding-top: 5px !important;
+      color: #334155 !important;
+      font-size: 8px !important;
+      text-align: left !important;
+      white-space: normal !important
+    }
+
+    .words-label {
+      display: block;
+      color: #1463df;
+      font-weight: 700
+    }
+
+    .signature-table {
+      margin-top: 7px
+    }
+
+    .signature-table td {
+      height: 48px;
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      vertical-align: bottom
+    }
+
+    .signature-space {
+      width: 60%
+    }
+
+    .signature-cell {
+      width: 40%;
+      text-align: center
+    }
+
+    .signature-image {
+      display: block;
+      max-width: 110px;
+      max-height: 30px;
+      margin: 0 auto 2px
+    }
+
+    .signature-line {
+      padding-top: 3px;
+      border-top: 1px solid #475569
+    }
+
+    .footer-table {
+      margin-top: 7px;
+      border-top: 1.5px solid #1463df
+    }
+
+    .footer-table td {
+      padding: 5px 4px;
+      text-align: center;
+      vertical-align: middle
+    }
+
+    .footer-contact td {
+      color: #334155;
+      font-size: 8px
+    }
+
+    .partner-row td {
+      padding-top: 3px
+    }
+
+    .partner-logo {
+      max-width: 72px;
+      max-height: 25px;
+      object-fit: contain
+    }
+
+    .page-number {
+      color: #64748b;
+      font-size: 7px
+    }
+
+    .empty {
+      text-align: center;
+      color: #64748b
+    }
+
+    @page {
+      size: A4;
+      margin: 0
+    }
+
+    @media print {
+
+      html,
+      body {
+        background: #fff
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0;
+        padding: 8mm 9mm box-shadow: 0 0 #0000, 0 0 #0000, 0 10px 15px -3px rgb(0, 0, 0, 0.1), 0 4px 6px -4px rgb(0, 0, 0, 0.1);
+      }
+    }
+
+    @media screen and (max-width:760px) {
+      body {
+        background: #fff
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 8px auto;
+        padding: 8mm 9mm;
+        background: #fff;
+        box-shadow: 0 0 #0000, 0 0 #0000, 0 10px 15px -3px rgb(0, 0, 0, 0.1), 0 4px 6px -4px rgb(0, 0, 0, 0.1);
+      }
+
+      .items {
+        min-width: 650px
+      }
+
+      .items-wrap {
+        overflow-x: auto
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <table class="header-table layout-table">
+      <tr>
+        <td class="brand-cell">{{#if company.logo_url}}<img class="brand-logo" src="{{company.logo_url}}"
+            alt="{{company.name}}">{{else}}<h1 class="brand-name">{{company.name}}</h1>{{#if company.tagline}}<p
+            class="brand-tagline">{{company.tagline}}</p>{{/if}}{{/if}}</td>
+        <td class="company-cell">
+          <h2 class="company-name">{{company.legal_name}}</h2>{{#if company.address}}<p class="company-line">
+            {{company.address}}</p>{{/if}}{{#if company.phone}}<p class="company-line">{{company.phone}}</p>{{/if}}{{#if
+          company.email}}<p class="company-line">{{company.email}}</p>{{/if}}{{#if company.website}}<p
+            class="company-line">{{company.website}}</p>{{/if}}{{#if company.gst_number}}<p class="company-line">
+            <strong>GSTIN:</strong> {{company.gst_number}}
+          </p>{{/if}}
+        </td>
+      </tr>
+    </table>
+
+    <table class="document-title layout-table">
+      <tr>
+        <td>QUOTATION</td>
+      </tr>
+    </table>
+
+    <table class="party-table section-table">
+      <tr>
+        <td>
+          <div class="section-title">Bill To</div>
+          <table class="details">
+            <tr>
+              <th>Company Name</th>
+              <td>{{customer.company_name}}</td>
+            </tr>{{#if customer.contact_person}}<tr>
+              <th>Contact Person</th>
+              <td>{{customer.contact_person}}</td>
+            </tr>{{/if}}{{#if customer.email}}<tr>
+              <th>Email</th>
+              <td>{{customer.email}}</td>
+            </tr>{{/if}}{{#if customer.mobile_no}}<tr>
+              <th>Phone</th>
+              <td>{{customer.mobile_no}}</td>
+            </tr>{{/if}}{{#if customer.gst_number}}<tr>
+              <th>GSTIN</th>
+              <td>{{customer.gst_number}}</td>
+            </tr>{{/if}}{{#if customer.address}}<tr>
+              <th>Address</th>
+              <td>{{customer.address}}</td>
+            </tr>{{/if}}
+          </table>
+        </td>
+        <td>
+          <div class="section-title">Quotation Details</div>
+          <table class="details">
+            <tr>
+              <th>Quotation No.</th>
+              <td class="accent">{{quotation.quotation_no}}</td>
+            </tr>
+            <tr>
+              <th>Quotation Date</th>
+              <td>{{quotation.quotation_date}}</td>
+            </tr>
+            <tr>
+              <th>Valid Until</th>
+              <td>{{quotation.valid_until}}</td>
+            </tr>{{#if quotation.status_label}}<tr>
+              <th>Status</th>
+              <td class="accent">{{quotation.status_label}}</td>
+            </tr>{{/if}}{{#if quotation.timeframe}}<tr>
+              <th>Timeframe</th>
+              <td>{{quotation.timeframe}}</td>
+            </tr>{{/if}}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    {{#if quotation.sales_executive}}<table class="sales-table section-table">
+      <tr>
+        <th>Sales Executive</th>
+        <td>{{quotation.sales_executive}}</td>
+      </tr>
+    </table>{{/if}}
+
+    <div class="items-wrap">
+      <table class="items">
+        <thead>
+          <tr>
+            <th class="number">#</th>
+            <th class="product">Product / Service</th>
+            <th class="description">Description</th>
+            <th class="qty">Qty</th>
+            <th class="rate">Rate</th>
+            <th class="tax">GST</th>
+            <th class="amount">Amount</th>
+          </tr>
+        </thead>
+        <tbody>{{#each items}}<tr>
+            <td class="number">{{display_index}}</td>
+            <td class="product">{{product_name}}</td>
+            <td class="description">{{product_description}}</td>
+            <td class="qty">{{quantity}}</td>
+            <td class="rate">{{rate_formatted}}</td>
+            <td class="tax">{{gst_rate_formatted}}</td>
+            <td class="amount">{{line_total_formatted}}</td>
+          </tr>{{else}}<tr>
+            <td colspan="7" class="empty">No quotation items</td>
+          </tr>{{/each}}</tbody>
+      </table>
+    </div>
+
+    <table class="summary-table section-table">
+      <tr>
+        <td>{{#if quotation.notes}}<h3 class="copy-title">Notes</h3>
+          <p class="copy-text">{{quotation.notes}}</p>{{/if}}{{#if terms}}<div class="copy-spacer"></div>
+          <h3 class="copy-title">Terms &amp; Conditions</h3>
+          <ul class="terms">{{#each terms}}<li>{{this}}</li>{{/each}}</ul>{{/if}}
+        </td>
+        <td>
+          <table class="totals">
+            <tr>
+              <th>Subtotal</th>
+              <td>{{totals.subtotal_formatted}}</td>
+            </tr>
+            <tr>
+              <th>Discount</th>
+              <td>{{totals.discount_total_formatted}}</td>
+            </tr>
+            <tr>
+              <th>Taxable Amount</th>
+              <td>{{totals.taxable_amount_formatted}}</td>
+            </tr>
+            <tr>
+              <th>GST</th>
+              <td>{{totals.tax_total_formatted}}</td>
+            </tr>
+            <tr class="grand">
+              <th>Grand Total</th>
+              <td>{{totals.grand_total_formatted}}</td>
+            </tr>{{#if totals.amount_in_words}}<tr class="words-row">
+              <td colspan="2"><span class="words-label">Amount in Words</span>{{totals.amount_in_words}}</td>
+            </tr>{{/if}}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table class="signature-table section-table">
+      <tr>
+        <td class="signature-space"></td>
+        <td class="signature-cell">{{#if company.signature_url}}<img class="signature-image"
+            src="{{company.signature_url}}" alt="Authorized signature">{{/if}}<div class="signature-line">Authorized
+            Signatory<br>For {{company.legal_name}}</div>
+        </td>
+      </tr>
+    </table>
+
+    <table class="footer-table section-table">
+      <tr class="footer-contact">
+        <td colspan="3">{{#if company.phone}}{{company.phone}}{{/if}}{{#if company.email}} &nbsp; | &nbsp;
+          {{company.email}}{{/if}}{{#if company.website}} &nbsp; | &nbsp; {{company.website}}{{/if}}{{#if
+          company.footer_address}} &nbsp; | &nbsp; {{company.footer_address}}{{/if}}</td>
+      </tr>{{#if footer_logos.length}}<tr class="partner-row">{{#each footer_logos}}<td><img class="partner-logo"
+            src="{{url}}" alt="{{name}}"></td>{{/each}}</tr>{{/if}}<tr>
+        <td colspan="3" class="page-number">Page 1 of 1</td>
+      </tr>
+    </table>
+  </main>
+</body>
+
+</html>

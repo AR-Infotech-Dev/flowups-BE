@@ -57,7 +57,7 @@ export const MAIL_PROVIDER_DEFAULTS = {
     outlook: { smtp_host: "smtp.office365.com", smtp_port: "587", smtp_encryption: "tls" },
 };
 export const ensureCompanyLogoDir = () => {
-    fsp.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
+    fs.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
 };
 export const companyValidationRules = {
     company_id: { label: "Company ID", type: "number" },
