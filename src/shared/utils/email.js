@@ -271,7 +271,27 @@ const getInlineLogo = async (logoPath = "") => {
             cid: "company-logo@flowups",
         };
     } catch {
-        return null;
+        // The file may live on a persistent/public storage path that is not
+        // available under this process's local public directory. Fetch it on
+        // the server and still embed it instead of making the mail client load it.
+        const publicUrl = buildLogoUrl(rawLogoPath);
+        if (!publicUrl) return null;
+
+        try {
+            const response = await fetch(publicUrl, { signal: AbortSignal.timeout(10000) });
+            if (!response.ok) return null;
+            const contentType = response.headers.get("content-type") || "image/png";
+            if (!contentType.toLowerCase().startsWith("image/")) return null;
+
+            return {
+                filename: path.basename(cleanPath) || "company-logo.png",
+                content: Buffer.from(await response.arrayBuffer()),
+                contentType,
+                cid: "company-logo@flowups",
+            };
+        } catch {
+            return null;
+        }
     }
 };
 
@@ -282,7 +302,9 @@ const formatMail = async (companyConfig = {}, html = '') => {
     mainMailBody = mainMailBody.replace(/{companyName}/g, config.company_name);
 
     const logoAttachment = await getInlineLogo(config.email_logo);
-    const logoUrl = logoAttachment ? `cid:${logoAttachment.cid}` : buildLogoUrl(config.email_logo);
+    // Never expose the public logo URL to Gmail/Outlook. Those clients proxy
+    // remote images and may fail to render them. Use an inline CID or no image.
+    const logoUrl = logoAttachment ? `cid:${logoAttachment.cid}` : "";
     const formattedHtml = await renderTemplate("mailLayout", "email", {
         appName: env.appName,
         appLink: env.appLink,
