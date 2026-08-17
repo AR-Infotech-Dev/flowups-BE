@@ -4,6 +4,7 @@ export const quotationValidationRules = {
   quotation_status: { label: "Quotation Status"},
   quotation_date: { label: "Quotation Date", type: "date", required: true },
   valid_until: { label: "Valid Until", type: "date", required: true },
+  timeframe: { label: "Timeframe", max: 100 },
   contact_id: { label: "Contact", type: "number" },
   ticket_id: { label: "Ticket", type: "number" },
   notes: { label: "Notes" },
@@ -25,6 +26,7 @@ export const prepareQuotationLines = (items = []) => items.map((item, index) => 
   return {
     product_id: item.product_id ? Number(item.product_id) : null,
     product_name: String(item.product_name || "").trim(),
+    product_description: String(item.product_description || "").trim(),
     quantity,
     rate: roundMoney(rate),
     discount_rate: roundMoney(discountRate),

@@ -1,6 +1,7 @@
 export const leadValidationRules = {
   customer_id: { label: "Customer", type: "number" }, name: { label: "Lead name", required: true, min: 1, max: 100 },
   company_name: { label: "Company name", max: 250 }, contact_person: { label: "Contact person", max: 145 },
+  gst_number: { label: "GST number", max: 15 },
   mobile_no: { label: "Mobile number", required: true, min: 7, max: 50 }, email: { label: "Email", type: "email", max: 100 },
   requirement: { label: "Requirement" }, lead_source: { label: "Lead source" }, lead_status: { label: "Lead status" },
   assigned_to: { label: "Assigned user", type: "number" }, next_followup_date: { label: "Next follow-up", type: "date" },

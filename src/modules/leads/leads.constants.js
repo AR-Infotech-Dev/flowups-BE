@@ -1,5 +1,5 @@
 export const MODULE_TABLE = "leads";
-export const LEAD_SEARCH_COLUMNS = ["t.name", "t.company_name", "t.contact_person", "t.mobile_no", "t.email", "t.requirement"];
+export const LEAD_SEARCH_COLUMNS = ["t.name", "t.company_name", "t.contact_person", "t.mobile_no", "t.email", "t.gst_number", "t.requirement"];
 export const defaultColumns = {
   customer_id: { table: "customer", alias: "cu", column: "name", key2: "customer_id", select: "" },
   assigned_to: { table: "admin", alias: "au", column: "name", key2: "adminID", select: "" },
