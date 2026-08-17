@@ -1,14 +1,8 @@
 import nodemailer from "nodemailer";
 import path from "path";
-import fs from "fs/promises";
-import { fileURLToPath } from "url";
 import { env } from "#config/env.js";
 import { query, DB_PREFIX } from "#config/database.js";
 import { renderTemplate } from "./templateMaker.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const publicRoot = path.resolve(__dirname, "../../../public");
 
 // ================================
 // Mail Transporter
@@ -90,7 +84,7 @@ export const testSmtpConnection = async (config = {}) => {
 
         await transporter.verify();
         const html = await renderTemplate("smtpConnectionTest", "email");
-        const { html: formattedHtml, logoAttachment } = await formatMail(config, html);
+        const formattedHtml = await mailFormat(config, html);
 
         await transporter.sendMail({
             from: `${senderName} <${senderEmail}>`,
@@ -98,7 +92,6 @@ export const testSmtpConnection = async (config = {}) => {
             subject: "SMTP Connection Test",
             text: "SMTP configuration successful.",
             html: formattedHtml,
-            attachments: logoAttachment ? [logoAttachment] : [],
         });
 
         return {
@@ -166,11 +159,8 @@ const getTransporter = async (company_id = null) => {
 export const sendEmail = async ({ to, subject, html, text = "", company_id = null, attachments = [], }) => {
     try {
         const { transporter, from, companyConfig } = await getTransporter(company_id);
-        const { html: formattedHtml, logoAttachment } = await formatMail(companyConfig, html);
+        const formattedHtml = await mailFormat(companyConfig, html);
         const fallbackText = text || String(html || "").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-        const emailAttachments = logoAttachment
-            ? [...attachments, logoAttachment]
-            : attachments;
 
         const info = await transporter.sendMail({
             from,
@@ -178,7 +168,7 @@ export const sendEmail = async ({ to, subject, html, text = "", company_id = nul
             subject,
             text: fallbackText,
             html: formattedHtml,
-            attachments: emailAttachments,
+            attachments,
         });
         return {
             success: true,
@@ -243,74 +233,17 @@ const buildLogoUrl = (logoPath = "") => {
     return baseUrl ? `${baseUrl}/${normalizedPath}` : `/${normalizedPath}`;
 };
 
-const getInlineLogo = async (logoPath = "") => {
-    const rawLogoPath = String(logoPath || "").trim();
-    if (!rawLogoPath) return null;
-
-    let storedPath = rawLogoPath;
-    if (/^https?:\/\//i.test(storedPath)) {
-        try {
-            const logoUrl = new URL(storedPath);
-            const appOrigin = new URL(env.appUrl).origin;
-            if (logoUrl.origin !== appOrigin) return null;
-            storedPath = logoUrl.pathname;
-        } catch {
-            return null;
-        }
-    }
-
-    const cleanPath = storedPath.replace(/\\/g, "/").replace(/^.*?public\//, "").replace(/^\/+/, "");
-    const absolutePath = path.resolve(publicRoot, cleanPath);
-    if (!absolutePath.startsWith(`${publicRoot}${path.sep}`)) return null;
-
-    try {
-        await fs.access(absolutePath);
-        return {
-            filename: path.basename(absolutePath),
-            path: absolutePath,
-            cid: "company-logo@flowups",
-        };
-    } catch {
-        // The file may live on a persistent/public storage path that is not
-        // available under this process's local public directory. Fetch it on
-        // the server and still embed it instead of making the mail client load it.
-        const publicUrl = buildLogoUrl(rawLogoPath);
-        if (!publicUrl) return null;
-
-        try {
-            const response = await fetch(publicUrl, { signal: AbortSignal.timeout(10000) });
-            if (!response.ok) return null;
-            const contentType = response.headers.get("content-type") || "image/png";
-            if (!contentType.toLowerCase().startsWith("image/")) return null;
-
-            return {
-                filename: path.basename(cleanPath) || "company-logo.png",
-                content: Buffer.from(await response.arrayBuffer()),
-                contentType,
-                cid: "company-logo@flowups",
-            };
-        } catch {
-            return null;
-        }
-    }
-};
-
-const formatMail = async (companyConfig = {}, html = '') => {
+const mailFormat = async (companyConfig = {}, html = '') => {
     const config = companyConfig || {};
     let mainMailBody = String(html || "");
     mainMailBody = mainMailBody.replace(/{appName}/g, env.appName);
     mainMailBody = mainMailBody.replace(/{companyName}/g, config.company_name);
 
-    const logoAttachment = await getInlineLogo(config.email_logo);
-    // Never expose the public logo URL to Gmail/Outlook. Those clients proxy
-    // remote images and may fail to render them. Use an inline CID or no image.
-    const logoUrl = logoAttachment ? `cid:${logoAttachment.cid}` : "";
-    const formattedHtml = await renderTemplate("mailLayout", "email", {
+    const logoUrl = buildLogoUrl(config.email_logo);
+    return renderTemplate("mailLayout", "email", {
         appName: env.appName,
         appLink: env.appLink,
         logoPath: logoUrl,
         mainMailBody,
     });
-
-    return { html: formattedHtml, logoAttachment };
 };
