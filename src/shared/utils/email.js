@@ -1,9 +1,14 @@
 import nodemailer from "nodemailer";
 import path from "path";
 import fs from "fs/promises";
+import { fileURLToPath } from "url";
 import { env } from "#config/env.js";
 import { query, DB_PREFIX } from "#config/database.js";
 import { renderTemplate } from "./templateMaker.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicRoot = path.resolve(__dirname, "../../../public");
 
 // ================================
 // Mail Transporter
@@ -240,11 +245,22 @@ const buildLogoUrl = (logoPath = "") => {
 
 const getInlineLogo = async (logoPath = "") => {
     const rawLogoPath = String(logoPath || "").trim();
-    if (!rawLogoPath || /^https?:\/\//i.test(rawLogoPath)) return null;
+    if (!rawLogoPath) return null;
 
-    const cleanPath = rawLogoPath.replace(/\\/g, "/").replace(/^.*?public\//, "").replace(/^\/+/, "");
-    const absolutePath = path.resolve(process.cwd(), "public", cleanPath);
-    const publicRoot = path.resolve(process.cwd(), "public");
+    let storedPath = rawLogoPath;
+    if (/^https?:\/\//i.test(storedPath)) {
+        try {
+            const logoUrl = new URL(storedPath);
+            const appOrigin = new URL(env.appUrl).origin;
+            if (logoUrl.origin !== appOrigin) return null;
+            storedPath = logoUrl.pathname;
+        } catch {
+            return null;
+        }
+    }
+
+    const cleanPath = storedPath.replace(/\\/g, "/").replace(/^.*?public\//, "").replace(/^\/+/, "");
+    const absolutePath = path.resolve(publicRoot, cleanPath);
     if (!absolutePath.startsWith(`${publicRoot}${path.sep}`)) return null;
 
     try {
