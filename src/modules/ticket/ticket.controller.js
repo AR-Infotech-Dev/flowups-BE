@@ -35,10 +35,10 @@ import {
 } from "./ticket.utils.js";
 import { generateTicketNumber } from "./ticket-number.helper.js";
 import { ticketValidationRules } from "./ticket.validation.js";
+import * as CommonModel from "#shared/models/common.model.js";
 
 export const list = async (req, res) => {
   try {
-
     const { viewAll, client_id = null, page = 1, order_by = "ticket_id", order = "DESC", searchText = "", getAll = "N", ticket_status = null, filters = [] } = req.body;
     const limit = env.perPage || 10;
     const currentPage = Number(page) || 1;
@@ -47,6 +47,7 @@ export const list = async (req, res) => {
     const effectiveFilters = ticket_status
       ? filters.filter((filter) => filter?.field !== "ticket_status")
       : filters;
+
     const filterData = prepareFilterData({
       filters: effectiveFilters,
       searchText,
@@ -54,6 +55,7 @@ export const list = async (req, res) => {
       default_columns: defaultColumns,
       custom_columns: customColumns,
     });
+
     const { select, where, values, join, other } = filterData;
 
     if (client_id) {
@@ -77,8 +79,8 @@ export const list = async (req, res) => {
 
     const shouldFilterByAssignee = !isSuperAdmin(req.user) && !(isAdmin(req.user) && (viewAll === "Y" || getAll === "Y")) && userId;
     if (shouldFilterByAssignee) {
-      where.push(`(t.assignee = ? OR t.created_by = ? OR ${getAssigneeHistoryExistsSql(userId, "(h.new_value = ? OR h.old_value = ? OR h.changed_by = ?)")})`);
-      values.push(userId, userId, String(userId), String(userId), userId);
+      where.push(`(t.assignee = ? OR t.created_by = ? OR ${getAssigneeHistoryExistsSql(userId, "(h.old_value = ? AND h.changed_by = ?)")})`);
+      values.push(userId, userId, String(userId), userId);
     }
 
     join.push({
@@ -98,15 +100,13 @@ export const list = async (req, res) => {
       ? await listTickets({ select, where, values, join, other })
       : await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
 
-    // let rows = [];
-    // if (getAll === "Y") {
-    //   rows = await listTickets({ select, where, values, join, other })
-    // } else {
-    //   rows = await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
-    // }
+    console.log("rows : ", rows);
 
     if (shouldFilterByAssignee && rows.length) {
       const historyRows = await getTicketVisibilityRows(rows.map((row) => row.ticket_id), userId);
+
+      console.log(historyRows);
+
       const historyByTicket = new Map();
       historyRows.forEach((history) => {
         const list = historyByTicket.get(history.ticket_id) || [];
@@ -114,10 +114,16 @@ export const list = async (req, res) => {
         historyByTicket.set(history.ticket_id, list);
       });
 
+      console.log(historyByTicket);
+
       rows.forEach((row) => {
         const ticketHistory = historyByTicket.get(row.ticket_id) || [];
-        const delegated = ticketHistory.some((history) => Number(history.new_value || 0) === userId);
-        const reassigned = ticketHistory.some((history) => Number(history.old_value || 0) === userId || Number(history.changed_by || 0) === userId);
+        const delegated = ticketHistory.some(
+          (history) =>
+            Number(history.old_value || 0) === userId &&
+            Number(history.changed_by || 0) === userId
+        );
+        const reassigned = false;
         row.delegation_flag = delegated ? "delegated" : reassigned ? "reassigned" : "";
         row.is_delegated = delegated ? "Y" : "N";
         row.is_reassigned = reassigned ? "Y" : "N";
@@ -142,7 +148,6 @@ export const list = async (req, res) => {
     });
   } catch (error) {
     console.log('error :', error);
-
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };
@@ -250,6 +255,18 @@ const createTicketDetails = async (req, res) => {
 
   const result = await createTicket(data);
 
+  const initialComment = String(req.body.initial_comment || "").trim();
+  if (initialComment) {
+    const commentData = await buildTablePayload("tickets_comments", {
+      ticket_id: result.insertId,
+      record_type: "ticket",
+      user_id: req.user.adminID,
+      comment_text: initialComment,
+      created_date: toMysqlDateTime(),
+    });
+    await CommonModel.saveMasterDetails({ table: "tickets_comments", data: commentData });
+  }
+
   if (shouldSaveContact) {
     await createCustomerContactIfMissing({
       customerId: data.client_id,
@@ -267,7 +284,11 @@ const createTicketDetails = async (req, res) => {
 
   await sendEmailToClient(result.insertId, "Your Call is Registered", "Your support ticket has been successfully created. Our team will review it shortly.");
 
-  return successResponse(res, { code: 1001, httpStatus: 201, data: { insertId: result.insertId } });
+  return successResponse(res, {
+    code: 1001,
+    httpStatus: 201,
+    data: { insertId: result.insertId, initial_comment_saved: Boolean(initialComment) },
+  });
 };
 
 const updateTicketDetails = async (req, res, ticket_id = null) => {
@@ -386,9 +407,6 @@ const closeTicketWithFeedback = async (ticket_id, modifiedById, ticketNo = "") =
 
   await sendEmailToClient(ticket_id, "Ticket is Closed !", "We would like to inform you that your support ticket has been closed.", feedbackUrl);
 };
-
-
-
 
 
 

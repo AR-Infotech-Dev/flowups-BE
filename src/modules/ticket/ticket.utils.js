@@ -118,7 +118,8 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
   if (!details.email || details.email.trim() === "") {
     return { success: false, message: "Client email not found" };
   }
-
+  console.log(details);
+  
   const html = await renderTemplate("ticketNotification", "email", {
     clientName: details.clientName || "User",
     ticketNo: details.ticket_no || "-",
@@ -128,6 +129,8 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
     assignedTo: details.assignedTo || "-",
     message: message || "Your ticket has been updated successfully.",
     category: details.query_type || "-",
+    contact_person: details.contact_person || "-",
+    contact_no: details.contact_no || "-",
     status: details.ticket_status || "-",
     priority: details.ticket_priority || "-",
     description: details.description || "-",
