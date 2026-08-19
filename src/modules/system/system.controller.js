@@ -74,21 +74,30 @@ export const getFreeTextSearch = async (req, res) => {
     const text = String(searchText).trim();
     const where = [];
     const values = [];
-
     // ===============================
     // INPUT SEARCH
     // ===============================
     if (type === "input") {
-      if (!text) {
+      if (!text?.trim()) {
         return failureResponse(res, {
           code: 2001,
           httpStatus: 400,
-          message: "Search text required"
+          message: "Search text required",
         });
       }
-
-      where.push(`t.${wherec} LIKE ?`);
-      values.push(`%${text}%`);
+      const columns = String(wherec).split(",").map((column) => column.trim()).filter(Boolean);
+      console.log('columns : ',columns);
+      
+      if (!columns.length) {
+        return failureResponse(res, {
+          code: 2002,
+          httpStatus: 400,
+          message: "Search columns required",
+        });
+      }
+      const searchCondition = columns.map((column) => `t.${column} LIKE ?`).join(" OR ");
+      where.push(`(${searchCondition})`);
+      values.push(...columns.map(() => `%${text.trim()}%`));
     }
 
     // ===============================
@@ -301,7 +310,7 @@ export const getslugList = async (req, res) => {
           select: "t.category_id,t.slug,t.categoryName,t.parent_id,t.is_parent,t.categories_index,t.cat_color",
           table: "categories",
           where: childW,
-          values:childV,
+          values: childV,
           join,
           other,
         });

@@ -240,8 +240,6 @@ const mailFormat = async (companyConfig = {}, html = '') => {
     mainMailBody = mainMailBody.replace(/{companyName}/g, config.company_name);
 
     const logoUrl = buildLogoUrl(config.email_logo);
-    console.log('logoUrl : ',logoUrl);
-    
     return renderTemplate("mailLayout", "email", {
         appName: env.appName,
         appLink: env.appLink,

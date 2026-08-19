@@ -7,8 +7,9 @@ export const ticketValidationRules = {
   query_type: { label: "Query Type", type: "number" },
   due_date: { label: "Due Date", type: "date" },
   description: { label: "Description" },
+  instructions: { label: "Instructions" },
+  initial_comment: { label: "Initial Comment", max: 5000 },
   product_add_ons: { label: "Product Add-ons" },
   created_by: { label: "Created By", type: "number" },
   modified_by: { label: "Modified By", type: "number" },
 };
-

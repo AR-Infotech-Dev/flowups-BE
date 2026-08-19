@@ -95,14 +95,17 @@ const getUserDetails = async (userId = "") => {
 
 export const getSummary = async ({ body, user }) => {
   const { whereSql, values } = buildTicketWhere({ body, user });
-  const delegatedWhere = ["h.field_name = 'assignee'"];
+  const delegatedWhere = [
+    "h.field_name = 'assignee'",
+    "h.action_type = 'reassigned'",
+  ];
   const delegatedValues = [];
   const generatedWhere = ["t.status = 'active'"];
   const generatedValues = [];
 
   if (body.user_id) {
-    delegatedWhere.push("h.changed_by = ?");
-    delegatedValues.push(body.user_id);
+    delegatedWhere.push("h.old_value = ?", "h.changed_by = ?");
+    delegatedValues.push(String(body.user_id), body.user_id);
 
     generatedWhere.push("t.created_by = ?");
     generatedValues.push(body.user_id);
