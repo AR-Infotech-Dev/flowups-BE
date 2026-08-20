@@ -150,33 +150,83 @@ export const normalizeCustomerContacts = (value) => {
     }))
     .filter((item) => item.name || item.designation || item.mobile_no || item.email || item.department);
 };
-
-export const validateCustomerContacts = (contacts = [], { requirePrimary = true } = {}) => {
-  if (!contacts.length) {
-    return { isValid: false, message: "At least one contact person is required" };
+export const validateCustomerContacts = (contacts = []) => {
+  if (!Array.isArray(contacts)) {
+    return {
+      isValid: false,
+      message: "Invalid contacts data",
+    };
   }
 
-  const invalidContact = contacts.find((contact) => !contact.name || !contact.mobile_no);
-  if (invalidContact) {
-    return { isValid: false, message: "Contact name and mobile number are required" };
+  const primaryContacts = contacts.filter(
+    (contact) => contact.is_primary === "y"
+  );
+
+  
+  if (primaryContacts.length > 1) {
+    return {
+      isValid: false,
+      message: "Only one primary contact is allowed",
+    };
   }
 
-  const invalidMobile = contacts.find((contact) => !/^[0-9]\d{9}$/.test(String(contact.mobile_no || "")));
-  if (invalidMobile) {
-    return { isValid: false, message: `Contact mobile number ${invalidMobile.mobile_no || ""} must be a valid 10-digit number` };
+  
+  if (primaryContacts.length === 0) {
+    return {
+      isValid: true,
+    };
+  }
+  const primary = primaryContacts[0];
+
+  if (!primary.name?.trim()) {
+    return {
+      isValid: false,
+      message: "Primary contact name is required",
+    };
   }
 
-  const invalidEmail = contacts.find((contact) => contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(contact.email).trim()));
-  if (invalidEmail) {
-    return { isValid: false, message: `Contact email ${invalidEmail.email} must be a valid email` };
+  if (!primary.designation?.trim()) {
+    return {
+      isValid: false,
+      message: "Primary contact designation is required",
+    };
   }
 
-  const primaryCount = contacts.filter((contact) => contact.is_primary === "y").length;
-  if (primaryCount > 1 || (requirePrimary && primaryCount !== 1)) {
-    return { isValid: false, message: "One primary contact is required" };
+  if (!primary.mobile_no?.trim()) {
+    return {
+      isValid: false,
+      message: "Primary contact mobile number is required",
+    };
   }
 
-  return { isValid: true };
+  if (!/^[0-9]{10}$/.test(primary.mobile_no)) {
+    return {
+      isValid: false,
+      message: "Primary contact mobile number must be a valid 10-digit number",
+    };
+  }
+
+  if (!primary.email?.trim()) {
+    return {
+      isValid: false,
+      message: "Primary contact email is required",
+    };
+  }
+
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+      String(primary.email).trim()
+    )
+  ) {
+    return {
+      isValid: false,
+      message: "Primary contact email must be a valid email",
+    };
+  }
+
+  return {
+    isValid: true,
+  };
 };
 
 const normalizeHeader = (value = "") =>

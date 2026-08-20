@@ -181,6 +181,15 @@ export const getCustomerDetails = async (req, res) => {
 
         const data = validation.data;
         const customerContacts = normalizeCustomerContacts(req.body.customer_contacts ?? req.body.contact_persons);
+        const contactValidation = validateCustomerContacts(customerContacts);
+
+        if (!contactValidation.isValid) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: contactValidation.message,
+          });
+        }
         const customerProducts = normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids);
         const serialValidation = await validateCustomerProductSerials({ products: customerProducts });
         if (!serialValidation.isValid) {
@@ -230,6 +239,15 @@ export const getCustomerDetails = async (req, res) => {
 
         const data = validation.data;
         const customerContacts = normalizeCustomerContacts(req.body.customer_contacts ?? req.body.contact_persons);
+        const contactValidation = validateCustomerContacts(customerContacts);
+
+        if (!contactValidation.isValid) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: contactValidation.message,
+          });
+        }
         const customerProducts = normalizeCustomerProducts(req.body.customer_products ?? req.body.product_ids);
         const serialValidation = await validateCustomerProductSerials({ products: customerProducts, excludeCustomerId: customer_id });
         if (!serialValidation.isValid) {
@@ -322,6 +340,8 @@ export const getCustomerDetails = async (req, res) => {
 export const changeStatus = async (req, res) => {
   try {
     const { action = "", ids = [] } = req.body;
+    console.log("Delete Action :", action);
+    console.log("Customer IDs :", ids);
 
     if (action.trim().toLowerCase() !== "delete") {
       return failureResponse(res, {
