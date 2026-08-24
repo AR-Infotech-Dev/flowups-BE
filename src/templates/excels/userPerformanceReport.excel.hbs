@@ -20,6 +20,8 @@
     <th class="ticket-header-cell">Due Date</th>
     <th class="ticket-header-cell">Call Direction</th>
     <th class="ticket-header-cell" colspan="1">Resolution Time</th>
+    <th class="ticket-header-cell" colspan="1">Work Logs</th>
+    <th class="ticket-header-cell" colspan="1">History</th>
 </tr>
 {{#if hasSupportRows}}
 {{#each supportRows}}
@@ -33,6 +35,8 @@
     <td class="ticket-cell">{{due_date}}</td>
     <td class="ticket-cell">{{call_direction}}</td>
     <td class="ticket-cell">{{resolution_time}}</td>
+    <td class="ticket-cell" style="white-space: normal; vertical-align: top; text-align: left; mso-data-placement: same-cell;">{{{work_logs}}}</td>
+    <td class="ticket-cell" style="white-space: normal; vertical-align: top; text-align: left; mso-data-placement: same-cell;">{{{history}}}</td>
 </tr>
 {{/each}}
 {{else}}

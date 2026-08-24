@@ -499,7 +499,6 @@ export const getCompanyDetails = async (req, res) => {
         dataforsync.modified_by = req.user.adminID;
         dataforsync.modified_date = toMysqlDateTime();
         dataforsync.company_id = company_id;
-        console.log('dataforsync : ', dataforsync);
 
         const result = await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
@@ -650,6 +649,7 @@ export const exportCompanyDb = async (req, res) => {
       ["ticket_history", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
       ["tickets_comments", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
       ["ticket_work_logs", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
+      ["ticket_feedback", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
       ["ticket_visits", `ticket_id IN (SELECT ticket_id FROM ${env.DB_PREFIX}tickets WHERE company_id = ${companyId})`],
       ["notifications", `user_id IN ( SELECT user_id FROM ${env.DB_PREFIX}admin WHERE company_id = ${companyId} )`]
       ["reminder_logs", `company_id = ${companyId}`],
@@ -667,7 +667,7 @@ export const exportCompanyDb = async (req, res) => {
     });
   } catch (error) {
     console.log('error : ', error);
-
+    
     fs.unlink(outputFile, () => { });
     return res.status(500).json({
       success: false,

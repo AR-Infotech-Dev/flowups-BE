@@ -10,7 +10,7 @@ const MODULE_TABLE = "module_access";
 // =============================================
 const menuValidationRules = {
   user_id: { label: "User Id", required: true },
-  permissions: { label: "Permissions", required: true },
+  permissions: { label: "Permissions", required: true, type: "object" },
   company_id: { label: "Company ID", required: true },
 };
 
@@ -85,9 +85,28 @@ export const saveModulesAccess = async (req, res) => {
 
     const data = validation.data;
     data.user_id = Number(user_id);
-    data.permissions = typeof data.permissions === "string"
-      ? data.permissions
-      : JSON.stringify(data.permissions);
+    let normalizedPermissions = data.permissions;
+    if (typeof normalizedPermissions === "string") {
+      try {
+        normalizedPermissions = JSON.parse(normalizedPermissions);
+      } catch {
+        return failureResponse(res, {
+          code: 2001,
+          httpStatus: 400,
+          message: "Permissions must be valid JSON",
+        });
+      }
+    }
+
+    if (!normalizedPermissions || typeof normalizedPermissions !== "object" || Array.isArray(normalizedPermissions)) {
+      return failureResponse(res, {
+        code: 2001,
+        httpStatus: 400,
+        message: "Permissions must be a JSON object",
+      });
+    }
+
+    data.permissions = JSON.stringify(normalizedPermissions);
 
     const existingRows = await CommonModel.getMasterDetails(MODULE_TABLE, "*", {
       user_id: data.user_id,

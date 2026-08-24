@@ -12,16 +12,6 @@ const __dirname = path.dirname(__filename);
 export const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../../public/images/company-logos");
 export const testCompanyDbConnection = async (config) => {
     let connection;
-    console.log(config);
-    console.log({
-        host: config.db_host,
-        port: config.db_port,
-        user: config.db_username,
-        password: config.db_password,
-        database: config.db_name,
-        connectTimeout: 10000,
-    });
-
     try {
         connection = await mysql.createConnection({
             host: config.db_host,
@@ -67,7 +57,7 @@ export const MAIL_PROVIDER_DEFAULTS = {
     outlook: { smtp_host: "smtp.office365.com", smtp_port: "587", smtp_encryption: "tls" },
 };
 export const ensureCompanyLogoDir = () => {
-    fsp.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
+    fs.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
 };
 export const companyValidationRules = {
     company_id: { label: "Company ID", type: "number" },

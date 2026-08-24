@@ -6,7 +6,8 @@ import {
   excelFormat
 } from "./excel.utils.js";
 import { renderTemplate } from "./templateMaker.js"
-
+import { formatHistoryForExcel } from "../../modules/reports/performance-report/ticketHistory.utils.js"
+import { formatWorkLogsForExcel } from "../../modules/reports/performance-report/worklogs.utils.js"
 export const formatDate = (value = null) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -158,7 +159,7 @@ export const buildReportAttachment = async ({ customer = {}, summary = {}, suppo
 export const buildPerformanceExcelAttachment = async ({ filters = {}, summary = {}, tickets = [], user = {} }) => {
   const userName = user.name || user.userName || user.email || filters.user_name || "Selected User";
 
-  const spreadsheetColumnCount = 9;
+  const spreadsheetColumnCount = 11;
   const formatResolutionDuration = (ticket = {}) => {
     const totalSeconds = Number.isFinite(Number(ticket.resolution_time_seconds))
       ? Math.max(0, Math.round(Number(ticket.resolution_time_seconds)))
@@ -195,28 +196,31 @@ export const buildPerformanceExcelAttachment = async ({ filters = {}, summary = 
         leftData: summaryDetails,
         rightTitle: "Report Details",
         rightData: details,
-        gapCols: 3,
+        gapCols: 5,
         labelColspan: 1,
         valueColspan: 2,
       }),
       hasSupportRows: tickets.length > 0,
       supportRows: tickets.map(
-        (row, index) => ({
-          srNo: index + 1,
-          ticket_no: row.ticket_no || "-",
-          customer_name: row.customer_name || "-",
-          created_date: formatDate(row.created_date) || "-",
-          ticket_priority: row.ticket_priority || "-",
-          ticket_status: row.ticket_status || "-",
-          assigned_date: formatDate(row.assigned_date) || "-",
-          due_date: formatDate(row.due_date) || "-",
-          call_direction: row.call_direction === "in" ? "Incomming" : "Outgoing",
-          resolution_time: formatResolutionDuration(row) || "-",
-        })
+        (row, index) => {
+          return ({
+            srNo: Number(index + 1),
+            ticket_no: row.ticket_no || "-",
+            customer_name: row.customer_name || "-",
+            created_date: formatDate(row.created_date) || "-",
+            ticket_priority: row.ticket_priority || "-",
+            ticket_status: row.ticket_status || "-",
+            assigned_date: formatDate(row.assigned_date) || "-",
+            due_date: formatDate(row.due_date) || "-",
+            call_direction: row.call_direction === "in" ? "Incomming" : "Outgoing",
+            resolution_time: formatResolutionDuration(row) || "-",
+            work_logs: formatWorkLogsForExcel(row.work_logs || []),
+            history: formatHistoryForExcel(row.history || [])
+          })
+        }
       ),
     }
   );
-
   return {
     filename: `Perfonrmance-Report-${filters.user_name || "User"}.xls`,
     content: await excelFormat(htmlBody),
@@ -283,3 +287,143 @@ export const buildCustomerWiseExcelAttachment = async ({ company = {}, customers
     contentType: "application/vnd.ms-excel",
   };
 };
+const toDateKey = (value) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const buildAttendanceDateColumns = (fromDate, toDate) => {
+  if (!fromDate || !toDate) return [];
+  const start = new Date(`${fromDate}T00:00:00`);
+  const end = new Date(`${toDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return [];
+
+  const columns = [];
+  for (let cursor = start; cursor <= end && columns.length < 62; cursor = new Date(cursor.getTime() + 86400000)) {
+    columns.push({
+      key: toDateKey(cursor),
+      label: cursor.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      weekday: cursor.toLocaleDateString("en-IN", { weekday: "short" }),
+      isWeekend: cursor.getDay() === 0,
+      isFuture: cursor > new Date(new Date().setHours(23, 59, 59, 999)),
+    });
+  }
+  return columns;
+};
+
+const getAttendanceCode = (record, date = {}) => {
+  if (record?.sign_in_at) return "P";
+  if (record?.status === "leave") return "L";
+  if (date.isFuture) return "-";
+  if (date.isWeekend) return "W";
+  return "A";
+};
+
+const getAttendanceExcelStyle = (code) => {
+  const styles = {
+    P: { cell: "color:#15803d;background:#dcfce7;", badge: "color:#15803d;background:#bbf7d0;" },
+    A: { cell: "color:#dc2626;background:#fee2e2;", badge: "color:#dc2626;background:#fecaca;" },
+    W: { cell: "color:#475569;background:#f1f5f9;", badge: "color:#475569;background:#e2e8f0;" },
+    L: { cell: "color:#ea580c;background:#ffedd5;", badge: "color:#ea580c;background:#fed7aa;" },
+    "-": { cell: "color:#94a3b8;background:#ffffff;", badge: "color:#94a3b8;background:#f8fafc;" },
+  };
+  return styles[code] || styles.A;
+};
+
+const formatAttendanceTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+};
+
+export const buildUserWiseAttendanceExcelAttachment = async ({
+  company = {},
+  users = [],
+  filters = {},
+  summary = {},
+}) => {
+  const dateColumns = buildAttendanceDateColumns(filters.from_date, filters.to_date);
+  const spreadsheetColumnCount = 5 + dateColumns.length;
+
+  const details = {
+    "Company ID": company.company_id || "-",
+    "Company Name": company.company_name || "-",
+    "From Date": filters.from_date || "-",
+    "To Date": filters.to_date || "-",
+  };
+
+  const summaryDetails = {
+    "Total Users": summary.total_users || 0,
+    "Signed In Users": summary.signed_in_users || 0,
+    "Signed Out Users": summary.signed_out_users || 0,
+    "Total Logs": summary.total_logs || 0,
+    "Total Sign In": summary.total_signins || 0,
+    "Total Sign Out": summary.total_signouts || 0,
+  };
+
+  const supportRows = users.map((row, index) => {
+    const records = new Map((row.attendance_days || []).map((record) => [String(record.attendance_date).slice(0, 10), record]));
+    const dayValues = dateColumns.map((date) => {
+      const record = records.get(date.key);
+      const code = getAttendanceCode(record, date);
+      const excelStyle = getAttendanceExcelStyle(code);
+
+      return {
+        code,
+        signIn: formatAttendanceTime(record?.sign_in_at),
+        signOut: record?.sign_out_at ? formatAttendanceTime(record.sign_out_at) : (record?.sign_in_at ? "MSO" : "-"),
+        location: record?.sign_in_location || record?.sign_out_location || record?.location || "-",
+        showDetails: Boolean(record?.sign_in_at),
+        cellStyle: excelStyle.cell,
+        badgeStyle: excelStyle.badge,
+      };
+    });
+
+    return {
+      srNo: index + 1,
+      user_name: row.user_name || "-",
+      username: row.username || "-",
+      email: row.email || "-",
+      total_logs: row.total_logs || 0,
+      total_signin: row.total_signin || 0,
+      total_signout: row.total_signout || 0,
+      dayValues,
+    };
+  });
+
+  const htmlBody = await renderTemplate(
+    "userWiseAttendanceReport",
+    "excel",
+    {
+      spreadsheetColumnCount,
+      reportTitle: "User Attendance",
+      spacerRow: await buildSheetSpacerRow(18, spreadsheetColumnCount),
+      summarySection: await buildSideBySideRows({
+        leftTitle: "Summary",
+        leftData: summaryDetails,
+        rightTitle: "Report Details",
+        rightData: details,
+        gapCols: 3,
+        labelColspan: 1,
+        valueColspan: 2,
+      }),
+      dateColumns,
+      hasSupportRows: supportRows.length > 0,
+      supportRows,
+    }
+  );
+
+  return {
+    filename: `User-wise-attendance-report${company.company_name ? "-" + company.company_name : ""}.xls`,
+    content: await excelFormat(htmlBody),
+    contentType: "application/vnd.ms-excel",
+  };
+};
+
+

@@ -1,6 +1,7 @@
 export const customerValidationRules = {
   customer_id: { label: "Customer ID", type: "number" },
   name: { label: "Name", required: true },
+  company_name: { label: "Company Name" },
   email: { label: "Email", type: "email" },
   mobile_no: { label: "Mobile Number" },
   contact_person: { label: "Contact Person" },

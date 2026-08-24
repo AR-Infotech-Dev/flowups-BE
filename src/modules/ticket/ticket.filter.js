@@ -20,6 +20,7 @@ export const defaultColumns = {
     key2: "category_id",
     select: "ct.cat_color AS type_color",
   },
+
   assignee: {
     table: "admin",
     alias: "a",

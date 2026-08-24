@@ -60,7 +60,6 @@ export const getcategoryDetails = async (req, res) => {
         const { select, where, values, join, other } = filterData;
         other.freeTextSearch = searchText;
         other.searchColumns = ["t.categoryName", "t.slug", "t.description"];
-        // console.log(other);
 
         if (!isSuperAdmin(req.user) && req.user.company_id) {
             where.push("t.company_id = ?");

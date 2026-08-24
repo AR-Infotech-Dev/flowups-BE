@@ -1,10 +1,20 @@
 import { DB_PREFIX, query } from "#config/database.js";
 import * as CommonModel from "#shared/models/common.model.js";
 import { prepareFilterData } from "#shared/utils/filter.builder.js";
+import { join } from "node:path";
 import { MODULE_TABLE } from "./ticket.constants.js";
 import { customColumns, defaultColumns } from "./ticket.filter.js";
-
-export const getTicketById = (ticketId) => CommonModel.getMasterDetails(MODULE_TABLE, "*", { ticket_id: ticketId });
+const printSql = (sql, params) => {
+  let fullSql = sql;
+  params.forEach(param => {
+    const formattedParam = typeof param === 'string' ? `'${param.replace(/'/g, "''")}'` : param;
+    fullSql = fullSql.replace('?', formattedParam);
+  });
+  console.log('{');
+  console.log('Sql :', fullSql);
+  console.log('}');
+}
+export const getTicketById = (ticketId, join) => CommonModel.getMasterDetails(MODULE_TABLE, "t.*, fd.rating as ratings", { "t.ticket_id": ticketId }, join);
 
 export const createTicket = (data) => CommonModel.saveMasterDetails({ table: MODULE_TABLE, data });
 
@@ -22,7 +32,7 @@ export const getTicketRecord = (ticketId, select = "*") => CommonModel.getSpecif
 
 export const getAdminName = (adminID) => CommonModel.getSpecificDetails("admin", "name", { adminID });
 
-export const getCategoryName = (categoryID) => CommonModel.getSpecificDetails("categories", "categoryName as name", { category_id : categoryID });
+export const getCategoryName = (categoryID) => CommonModel.getSpecificDetails("categories", "categoryName as name", { category_id: categoryID });
 
 export const getCustomerAmcFields = (customerId) => CommonModel.getSpecificDetails("customer", "is_amc, amc_start_date, amc_end_date, amc_term_period", { customer_id: customerId });
 
@@ -46,10 +56,11 @@ export const getTicketVisibilityRows = async (ticketIds = [], userId = 0) => {
     WHERE ticket_id IN (${placeholders})
       AND field_name = 'assignee'
       AND action_type = 'reassigned'
-      AND (new_value = ? OR old_value = ? OR changed_by = ?)
+      AND old_value = ?
+      AND changed_by = ?
   `;
 
-  return await query(sql, [...ids, String(safeUserId), String(safeUserId), safeUserId]);
+  return await query(sql, [...ids, String(safeUserId), safeUserId]);
 };
 export const getTicketNotificationDetails = async (ticketId) => {
   const filterData = prepareFilterData({ default_columns: defaultColumns, custom_columns: customColumns });
@@ -58,6 +69,8 @@ export const getTicketNotificationDetails = async (ticketId) => {
     t.ticket_no,
     t.company_id,
     t.description,
+    t.contact_no,
+    t.contact_person,
     DATE_FORMAT(t.created_date, '%d %M %Y') AS created_date,
     DATE_FORMAT(t.due_date, '%d %M %Y') AS due_date,
     a.name AS assignedTo,
@@ -106,5 +119,3 @@ export const getLastTicketNoByPattern = async ({ prefix, company_id, resetKey, p
 
   return rows?.[0]?.ticket_no || null;
 };
-
-

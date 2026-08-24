@@ -12,12 +12,7 @@ const getClientKey = (req, keyPrefix) => {
   return `${keyPrefix}:${ip}:${String(username).toLowerCase()}`;
 };
 
-export const rateLimit = ({
-  windowMs = 15 * 60 * 1000,
-  max = 10,
-  keyPrefix = "default",
-  message = "Too many requests. Please try again later.",
-} = {}) => {
+export const rateLimit = ({ windowMs = 15 * 60 * 1000, max = 10, keyPrefix = "default", message = "Too many requests. Please try again later.", } = {}) => {
   return (req, res, next) => {
     const now = Date.now();
     const key = getClientKey(req, keyPrefix);
