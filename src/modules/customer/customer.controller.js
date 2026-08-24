@@ -153,6 +153,8 @@ export const list = async (req, res) => {
       where.push("t.company_id = ?");
       values.push(req.user.company_id);
     }
+    where.push("t.status = ?");
+    values.push('active');
 
     const total = await CommonModel.getCountsByParameter({ table: MODULE_TABLE, where, values, join, other, });
     const totalPages = Math.ceil(total / limit);
@@ -396,6 +398,8 @@ export const changeStatus = async (req, res) => {
       data: [],
     });
   } catch (error) {
+    console.log(' error:', error);
+
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,

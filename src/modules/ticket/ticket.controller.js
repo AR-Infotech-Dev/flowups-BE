@@ -378,7 +378,7 @@ export const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {})
         body: `Ticket #${tn}'s status has been changed by ${modifiedBy?.name || "-"} to ${ticket_status_cat?.name || "-"}.`,
       });
 
-      await sendEmailToClient(ticket_id, "Ticket Status is Changed", "We would like to inform you that the status of your for your support ticket has been updated.");
+      await sendEmailToClient(ticket_id, "Ticket Status is Changed", "We would like to inform you that the status of your support ticket has been updated.");
     }
   }
 

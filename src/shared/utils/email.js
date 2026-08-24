@@ -1,5 +1,4 @@
 import nodemailer from "nodemailer";
-import path from "path";
 import { env } from "#config/env.js";
 import { query, DB_PREFIX } from "#config/database.js";
 import { renderTemplate } from "./templateMaker.js";
@@ -227,9 +226,10 @@ const buildLogoUrl = (logoPath = "") => {
         .replace(/\\/g, "/")
         .replace(/^.*?public\//, "")
         .replace(/^\/+/, "");
-    const normalizedPath = cleanPath.includes("images/company-logos/")
-        ? cleanPath.slice(cleanPath.indexOf("images/company-logos/"))
-        : `images/company-logos/${path.basename(cleanPath)}`;
+    const imagesIndex = cleanPath.indexOf("images/");
+    const normalizedPath = imagesIndex >= 0
+        ? cleanPath.slice(imagesIndex)
+        : cleanPath;
     return baseUrl ? `${baseUrl}/${normalizedPath}` : `/${normalizedPath}`;
 };
 

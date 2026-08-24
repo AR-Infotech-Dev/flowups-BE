@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{quotation.quotation_no}} - Quotation</title>
+  <style>
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: #eee;
+      color: #2d2d2d;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 15px;
+      line-height: 1.4
+    }
+
+    .page {
+      position: relative;
+      width: 209mm;
+      min-height: 296mm;
+      margin: 8px auto;
+      padding: 10mm 13mm 10mm;
+      background: #fff;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, .14);
+      overflow: visible
+    }
+
+    table {
+      width: 100%;
+      max-width: 100%;
+      border-collapse: collapse
+    }
+
+    .print-layout {
+      width: 100%;
+      max-width: 100%;
+      table-layout: fixed
+    }
+
+    .header {
+      position: relative;
+      height: 22mm;
+      text-align: right;
+      vertical-align: top
+    }
+
+    .brand-logo {
+      display: inline-block;
+      max-width: 170px;
+      max-height: 60px;
+      object-fit: contain
+    }
+
+    .brand-name {
+      margin: 0;
+      color: #1463df;
+      font-size: 25px;
+      line-height: 1.05
+    }
+
+    .tagline {
+      margin: 2px 0 0;
+      font-size: 11px;
+      font-weight: 700
+    }
+
+    .document-meta {
+      margin: 0 0 15px
+    }
+
+    .document-title {
+      position: absolute;
+      top: 10mm;
+      left: 13mm;
+      margin: 0;
+
+      font-size: 35px;
+      line-height: 1.2;
+      font-weight: 700;
+      letter-spacing: 7px;
+      text-align: left
+    }
+
+    .document-meta p {
+      margin: 0
+    }
+
+    .recipient {
+      max-width: 60%;
+      margin: 0 0 13px
+    }
+
+    .recipient strong {
+      display: block;
+      font-size: 15px
+    }
+
+    .salutation,
+    .intro {
+      margin: 0 0 15px
+    }
+
+    .items {
+      margin-top: 4px;
+      table-layout: fixed
+    }
+
+    .items th {
+      padding: 4px 3px;
+      border-bottom: 1px solid #9E9E9E;
+      font-size: 13px;
+      text-align: left;
+      overflow-wrap: anywhere
+    }
+
+    .items td {
+      padding: 8px 3px 7px;
+      vertical-align: top;
+      overflow-wrap: anywhere
+    }
+
+    .items tr {
+      break-inside: avoid;
+      page-break-inside: avoid
+    }
+
+    .items .number {
+      width: 8%;
+      text-align: center
+    }
+
+    .items .description {
+      width: 43%
+    }
+
+    .items .rate {
+      width: 14%;
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .items .discount,
+    .items .gst {
+      width: 10%;
+      text-align: center;
+      white-space: nowrap
+    }
+
+    .items .total {
+      width: 15%;
+      text-align: right;
+      white-space: nowrap;
+      font-weight: 700
+    }
+
+    .product-name {
+      display: block;
+      font-weight: 700
+    }
+
+    .product-description {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px
+    }
+
+    .section {
+      margin: 20px 0 0 0;
+      font-size: 14px;
+      line-height: 1.5
+    }
+
+    .section-title {
+      margin: 0 0 9px;
+      padding-bottom: 4px;
+      font-size: 17px;
+      line-height: 1.25;
+      font-weight: 700;
+      text-decoration: underline;
+    }
+
+    .section.scope-section {
+      margin: 0;
+      margin-top: 20px
+    }
+
+    .notes {
+      margin: 0;
+      white-space: pre-line
+    }
+
+    .divider {
+      margin: 15px 0 13px;
+      border: 0;
+      border-top: 1px solid #9E9E9E;
+    }
+
+    .terms-title {
+      margin: 0 0 9px;
+      padding-bottom: 4px;
+      text-decoration: underline;
+      font-size: 17px;
+      line-height: 1.25;
+      font-weight: 700
+    }
+
+    .terms-content {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5
+    }
+
+    .terms-content p {
+      margin: 2px 0
+    }
+
+    .terms-content ul,
+    .terms-content ol {
+      margin: 3px 0;
+      word-wrap: break-word;
+      padding-left: 18px;
+    }
+
+    .terms-content li {
+      margin: 2px 0
+    }
+
+    .terms-content p,
+    .terms-content li {
+      break-inside: avoid;
+      page-break-inside: avoid
+    }
+
+    .totals {
+      width: 48%;
+      margin: 10px 0 0 auto
+    }
+
+    .totals th,
+    .totals td {
+      padding: 2px 0
+    }
+
+    .totals th {
+      text-align: left
+    }
+
+    .totals td {
+      text-align: right;
+      white-space: nowrap
+    }
+
+    .totals .grand th,
+    .totals .grand td {
+      padding-top: 4px;
+      border-top: 1px solid #777;
+      font-size: 15px
+    }
+
+    .words {
+      margin: 5px 0 0;
+      font-size: 12px
+    }
+
+    .company-details {
+      margin-top: 0;
+      break-inside: avoid;
+      page-break-inside: avoid
+    }
+
+    .terms-section,
+    .closing-section {
+      break-inside: avoid;
+      page-break-inside: avoid
+    }
+
+    .closing-section {
+      margin-top: 15mm
+    }
+
+    .company-details h3 {
+      margin: 0 0 11px;
+      padding-bottom: 4px;
+      text-decoration: underline;
+    }
+
+    .company-details p {
+      margin: 2px 0
+    }
+
+    .bank-details-list {
+      display: grid;
+      max-width: 420px;
+      gap: 4px;
+      font-size: 14px;
+      line-height: 1.45
+    }
+
+    .bank-detail-row {
+      display: grid;
+      grid-template-columns: 105px 12px minmax(0, 1fr);
+      align-items: baseline
+    }
+
+    .closing-bottom {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(245px, 42%);
+      gap: 24px;
+      align-items: start;
+      margin-top: 12mm;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    .thanks {
+      margin: 0
+    }
+
+    .signature {
+      margin: 0;
+      font-weight: 700;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      text-align: center;
+    }
+
+    .signature img {
+      display: block;
+      width: 150px;
+      height: 58px;
+      margin: 2px auto;
+      object-fit: cover;
+      object-position: left center
+    }
+
+    .signature-company,
+    .signature-label {
+      display: block
+    }
+
+    .signature-label {
+      margin-top: 3px
+    }
+
+    .footer {
+      display: flex;
+      gap: 2;
+      position: relative;
+      min-height: 17mm;
+      margin-top: 18mm;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      padding: 10px;
+      border-top: 1px solid #9E9E9E;
+    }
+
+    .footer-brand {
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+    }
+
+    .footer-brand img {
+      display: block;
+      max-width: 110px;
+      max-height: 50px;
+      object-fit: contain;
+      margin: auto;
+    }
+
+    .footer-copy {
+      margin: 0 0mm;
+      text-align: left;
+      font-size: 11px;
+      line-height: 1.45
+    }
+
+    .footer-copy strong {
+      display: block
+    }
+
+    .footer-logos {
+      margin-top: 5px;
+      text-align: left
+    }
+
+    .footer-logos img {
+      max-width: 55px;
+      max-height: 20px;
+      margin: 0 4px;
+      object-fit: contain
+    }
+
+    .note-list {
+      margin: 0;
+      padding-left: 17px
+    }
+
+    .note-list li {
+      margin: 2px 0
+    }
+
+    .signature-space {
+      display: block;
+      width: 130px;
+      height: 42px;
+      margin-top: 8px
+    }
+
+    .heading {
+      margin: 0 0 9px;
+      font-size: 17px;
+      line-height: 1.25;
+      font-weight: 700;
+    }
+
+    .print-layout>tbody>tr>td {
+      width: 100%;
+      max-width: 100%;
+      padding: 0;
+      overflow-wrap: anywhere
+    }
+
+    .print-page-header,
+    .print-page-footer {
+      display: none
+    }
+
+    @page {
+      size: A4;
+      margin: 0
+    }
+
+    @media print {
+
+      html,
+      body {
+        background: #fff
+      }
+
+      .page {
+        width: 209mm;
+        min-height: 0;
+        margin: 0;
+        padding: 0 13mm;
+        box-shadow: none
+      }
+
+      .page>.header {
+        display: none
+      }
+
+      .page>.footer {
+        display: block;
+        position: fixed;
+        right: 13mm;
+        bottom: 5mm;
+        left: 13mm;
+        min-height: 13mm;
+        margin: 0;
+        padding: 0
+      }
+
+      .footer-brand img {
+        max-height: 38px
+      }
+
+      .items thead {
+        display: table-row-group
+      }
+
+      .print-layout thead {
+        display: table-header-group
+      }
+
+      .print-layout tfoot {
+        display: table-footer-group
+      }
+
+      .print-page-header {
+        display: block;
+        position: relative;
+        height: 25mm;
+        padding-top: 6mm;
+        text-align: right
+      }
+
+      .document-title {
+        top: 6mm
+      }
+
+      .print-page-footer {
+        display: block;
+        position: relative;
+        height: 20mm;
+        padding-top: 5mm
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <h1 class="document-title">Quotation</h1>
+    <header class="header">
+      {{#if company.logo_url}}
+      <img class="brand-logo" src="{{company.logo_url}}" alt="{{company.name}}">
+      {{else}}
+      <h1 class="brand-name">{{company.name}}</h1>
+      {{#if company.tagline}}
+      <p class="tagline">{{company.tagline}}</p>
+      {{/if}}{{/if}}
+    </header>
+    <table class="print-layout">
+      <thead>
+        <tr>
+          <td>
+            <div class="print-page-header">
+              {{#if company.logo_url}}<img class="brand-logo"
+                src="{{company.logo_url}}" alt="{{company.name}}">{{else}}<h1 class="brand-name">{{company.name}}</h1>
+              {{#if company.tagline}}<p class="tagline">{{company.tagline}}</p>{{/if}}{{/if}}
+            </div>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <section class="document-meta">
+              <p>Date: {{quotation.quotation_date}}</p>
+              <p>Quotation No.: {{quotation.quotation_no}}</p>
+            </section>
+            <section class="recipient"><strong>To,</strong><strong>{{customer.company_name}}</strong>{{#if
+              customer.contact_person}}<span>{{customer.contact_person}}</span><br>{{/if}}{{#if
+              customer.address}}<span>{{customer.address}}</span>{{/if}}</section>
+            <p class="salutation">Dear Sir/Madam,</p>
+            <p class="intro">We thank you very much for your enquiry for Tally Software Services and are pleased to
+              quote our best offer same as follows. </p>
+            {{#if quotation.scope_of_work}}
+            <section class="section scope-section">
+              <h3 class="section-title">Scope of Work</h3>
+              <div class="terms-content">{{{quotation.scope_of_work}}}</div>
+            </section>
+            {{/if}}
+            <table class="items">
+              <thead>
+                <tr>
+                  <th class="number">Sr. No.</th>
+                  <th class="description">Item Description</th>
+                  <th class="rate">Rate</th>
+                  <th class="discount">Disc</th>
+                  <th class="gst">GST</th>
+                  <th class="total">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each items}}
+                <tr>
+                  <td class="number"><strong>{{display_index}}.</strong></td>
+                  <td class="description"><span class="product-name">{{product_name}}</span>{{#if
+                    product_description}}<span class="product-description">{{product_description}}</span>{{/if}}</td>
+                  <td class="rate"><strong>{{rate_formatted}}</strong></td>
+                  <td class="discount">{{#if discount_rate}}{{discount_rate}}%{{else}}-{{/if}}</td>
+                  <td class="gst">{{gst_rate_formatted}}</td>
+                  <td class="total">{{line_total_formatted}}</td>
+                </tr>
+                {{else}}
+                <tr>
+                  <td colspan="6">No quotation items</td>
+                </tr>
+                {{/each}}
+              </tbody>
+            </table>
+            <hr class="divider">
+            {{#if quotation.notes}}
+            <section class="section">
+              <h3 class="section-title">Notes</h3>
+              {{{quotation.notes}}}
+            </section>
+            {{/if}}
+            <section class="terms-section">
+              <h3 class="terms-title heading">Terms &amp; Conditions:</h3>
+              {{#if company.quotation_terms_html}}
+              <div class="terms-content">{{{company.quotation_terms_html}}}</div>
+              {{/if}}
+            </section>
+            {{!-- <table class="totals">
+              <tr>
+                <th>Subtotal</th>
+                <td>{{totals.subtotal_formatted}}</td>
+              </tr>
+              <tr>
+                <th>Discount</th>
+                <td>{{totals.discount_total_formatted}}</td>
+              </tr>
+              <tr>
+                <th>Taxable Amount</th>
+                <td>{{totals.taxable_amount_formatted}}</td>
+              </tr>
+              <tr>
+                <th>GST</th>
+                <td>{{totals.tax_total_formatted}}</td>
+              </tr>
+              <tr class="grand">
+                <th>Grand Total</th>
+                <td>{{totals.grand_total_formatted}}</td>
+              </tr>
+            </table> --}}
+            {{#if totals.amount_in_words}}<p class="words"><strong>Amount in Words:</strong> {{totals.amount_in_words}}
+            </p>
+            {{/if}}
+
+            <section class="closing-section">
+              <div class="company-details">
+                {{#if company.has_bank_details}}<h3 class="heading">Bank Details:</h3>
+                <div class="bank-details-list">
+                  {{#if company.bank_name}}<div class="bank-detail-row"><span>Bank
+                      Name</span><span>:</span><span>{{company.bank_name}}</span></div>{{/if}}
+                  {{#if company.account_name}}<div class="bank-detail-row"><span>Account
+                      Name</span><span>:</span><span>{{company.account_name}}</span></div>{{/if}}
+                  {{#if company.account_number}}<div class="bank-detail-row"><span>A/C
+                      No.</span><span>:</span><span>{{company.account_number}}</span></div>{{/if}}
+                  {{#if company.ifsc_code}}<div class="bank-detail-row"><span>IFSC
+                      Code</span><span>:</span><span>{{company.ifsc_code}}</span></div>{{/if}}
+                  {{#if company.branch}}<div class="bank-detail-row">
+                    <span>Branch</span><span>:</span><span>{{company.branch}}</span>
+                  </div>{{/if}}
+                </div>
+                {{else}}<h3>Company Details:</h3>
+                <p><strong>Company Name</strong> &nbsp; : &nbsp; {{company.legal_name}}</p>{{#if company.gst_number}}<p>
+                  <strong>GSTIN</strong> &nbsp; : &nbsp; {{company.gst_number}}
+                </p>{{/if}}{{#if company.address}}<p>
+                  <strong>Address</strong> &nbsp; : &nbsp; {{company.address}}
+                </p>{{/if}}{{#if company.phone}}<p>
+                  <strong>Contact</strong> &nbsp; : &nbsp; {{company.phone}}
+                </p>{{/if}}{{#if company.email}}<p>
+                  <strong>Email</strong> &nbsp; : &nbsp; {{company.email}}
+                </p>{{/if}}{{/if}}
+              </div>
+
+              <div class="closing-bottom">
+                <p class="thanks">Thanking you</p>
+                <div class="signature">
+                  <span class="signature-company">For {{company.legal_name}}</span>
+                  {{#if company.signature_url}}
+                  <img src="{{company.signature_url}}" alt="Authorized signature">{{else}}
+                  <span class="signature-space"></span>
+                  {{/if}}
+                  <span class="signature-label">Authorized Signatory</span>
+                </div>
+              </div>
+            </section>
+          </td>
+        </tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td>
+            <div class="print-page-footer"></div>
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+    <footer class="footer">
+      <table>
+        <tbody>
+          <tr>
+            <td>
+              <div class="footer-brand">
+                {{#if company.logo_url}}
+                <img src="{{company.logo_url}}" alt="{{company.name}}">
+                {{else}}
+                {{company.name}}
+                {{/if}}
+                <strong>{{company.legal_name}}</strong>
+              </div>
+            </td>
+            <td>
+              <div class="footer-copy">
+                {{#if company.address}} {{company.address}} <br> {{/if}}
+                {{#if company.phone}}Contact: {{company.phone}}{{/if}}
+                {{#if company.email}} &nbsp; E Mail: {{company.email}}{{/if}}
+                {{#if company.website}} &nbsp; Website: {{company.website}}{{/if}}
+
+                {{#if footer_logos.length}}
+                <div class="footer-logos">
+                  {{#each footer_logos}}
+                  <img src="{{url}}" alt="{{name}}">
+                  {{/each}}
+                </div>
+                {{/if}}
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+    </footer>
+  </main>
+</body>
+
+</html>
