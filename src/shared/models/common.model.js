@@ -272,14 +272,8 @@ export const deleteMasterDetails = async ({ table = "", where = {} } = {}) => {
 // =====================================
 export const changeMasterStatus = async ({ table = "", status = "delete", ids = [], key = "adminID" } = {}) => {
     const placeholders = ids.map(() => "?").join(",");
-
-    const sql = `
-    UPDATE ${DB_PREFIX}${table}
-    SET status = ?
-    WHERE ${key} IN (${placeholders})
-  `;
-
-    const [result] = await query(sql, [status, ...ids]);
+    const sql = ` UPDATE ${DB_PREFIX}${table} SET status = ? WHERE ${key} IN (${placeholders}) `;
+    const result = await query(sql, [status, ...ids]);
     return result;
 };
 

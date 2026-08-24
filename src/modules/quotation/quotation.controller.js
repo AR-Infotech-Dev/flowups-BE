@@ -48,6 +48,29 @@ const parseJsonArray = (value) => {
   try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : []; } catch { return []; }
 };
 
+const sanitizeQuotationHtml = (value) => {
+  const allowedTags = new Set(["p", "strong", "b", "em", "i", "u", "ul", "ol", "li", "br", "span"]);
+  return String(value || "")
+    .replace(/<(script|style|iframe|object|embed|form|button|input|textarea|select|option|meta|link|base)[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
+    .replace(/<(script|style|iframe|object|embed|form|button|input|textarea|select|option|meta|link|base)[^>]*\/?\s*>/gi, "")
+    .replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (tag, name) => {
+      const normalizedName = String(name).toLowerCase();
+      if (!allowedTags.has(normalizedName)) return "";
+      if (normalizedName === "br") return "<br>";
+      return tag.startsWith("</") ? `</${normalizedName}>` : `<${normalizedName}>`;
+    });
+};
+
+const sanitizeOptionalQuotationHtml = (value) => {
+  const sanitized = sanitizeQuotationHtml(value);
+  const visibleText = sanitized
+    .replace(/<br\s*\/?\s*>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;|&#160;|&#xA0;/gi, " ")
+    .trim();
+  return visibleText ? sanitized : "";
+};
+
 const absoluteAssetUrl = (value) => value && !/^https?:\/\//i.test(value)
   ? `${env.baseUrl}${String(value).startsWith("/") ? "" : "/"}${value}`
   : value;
@@ -91,6 +114,7 @@ const resolveApprovedCustomer = async ({ quotation, user }) => {
       gst_number: lead.gst_number || null,
       address: lead.address || null,
       responsible_person: lead.assigned_to || user.adminID,
+
       customer_products: quotationLines.map((line) => ({
         product_id: line.product_id,
         product_name: line.product_name,
@@ -341,13 +365,14 @@ export const preview = async (req, res) => {
     ]);
     const company = companyRows[0] || {};
     const party = customerRows[0] || leadRows[0] || {};
-    const taxableAmount = Number(quotation.subtotal || 0) - Number(quotation.discount_total || 0);
+    const previewItems = prepareQuotationLines(items);
+    const previewTotals = calculateQuotationTotals(previewItems);
+    const taxableAmount = previewTotals.subtotal - previewTotals.discount_total;
     const footerLogos = parseJsonArray(company.footer_logos || quotation.footer_logos).map((logo) => ({
       name: logo.name || logo.label || "Partner",
       url: absoluteAssetUrl(logo.url || logo.logo_url || logo.path),
     })).filter((logo) => logo.url);
-
-    const html = await renderTemplate("quotation", "preview", {
+    const details = {
       company: {
         name: company.company_name || env.appName,
         legal_name: company.company_name || env.appName,
@@ -359,7 +384,13 @@ export const preview = async (req, res) => {
         email: company.sender_email || company.cc_email || "",
         website: company.website || "",
         gst_number: company.gst_number || "",
-        signature_url: absoluteAssetUrl(company.signature_url),
+        signature_url: absoluteAssetUrl(company.authority_sign || company.signature_url),
+        quotation_terms_html: sanitizeOptionalQuotationHtml(company.quotation_terms),
+        bank_name: company.bank_name || "",
+        account_number: company.account_number || "",
+        ifsc_code: company.ifsc_code || "",
+        branch: company.branch || "",
+        has_bank_details: Boolean(company.bank_name || company.account_number || company.ifsc_code || company.branch),
       },
       customer: {
         company_name: party.company_name || party.name || quotation.customer_name || quotation.lead_name || "-",
@@ -376,9 +407,11 @@ export const preview = async (req, res) => {
         status_label: String(quotation.quotation_status || "").replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
         timeframe: quotation.timeframe || "",
         sales_executive: adminRows[0]?.name || "",
-        notes: quotation.notes || "",
+        scope_of_work: sanitizeOptionalQuotationHtml(quotation.scope_of_work),
+        notes: sanitizeOptionalQuotationHtml(quotation.notes),
+        // :note_lines String(quotation.notes || "").split(/\r?\n/).map((note) => note.trim()).filter(Boolean),
       },
-      items: items.map((item, index) => ({
+      items: previewItems.map((item, index) => ({
         ...item,
         display_index: index + 1,
         rate_formatted: formatPreviewMoney(item.rate),
@@ -387,15 +420,17 @@ export const preview = async (req, res) => {
       })),
       terms: String(quotation.terms || "").split(/\r?\n/).map((term) => term.trim()).filter(Boolean),
       totals: {
-        subtotal_formatted: formatPreviewMoney(quotation.subtotal),
-        discount_total_formatted: `- ${formatPreviewMoney(quotation.discount_total)}`,
+        subtotal_formatted: formatPreviewMoney(previewTotals.subtotal),
+        discount_total_formatted: `- ${formatPreviewMoney(previewTotals.discount_total)}`,
         taxable_amount_formatted: formatPreviewMoney(taxableAmount),
-        tax_total_formatted: formatPreviewMoney(quotation.tax_total),
-        grand_total_formatted: formatPreviewMoney(quotation.grand_total),
+        tax_total_formatted: formatPreviewMoney(previewTotals.tax_total),
+        grand_total_formatted: formatPreviewMoney(previewTotals.grand_total),
         amount_in_words: quotation.amount_in_words || "",
       },
       footer_logos: footerLogos,
-    });
+    };
+
+    const html = await renderTemplate("quotation-1", "preview", details);
 
     return successResponse(res, { code: 1004, httpStatus: 200, data: { data: { html } } });
   } catch (error) {

@@ -61,7 +61,7 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    const activeSessionId = await getActiveSessionId(decoded.adminID,isMobile);
+    const activeSessionId = await getActiveSessionId(decoded.adminID, isMobile);
     if (!activeSessionId || activeSessionId !== decoded.active_session_id) {
       return failureResponse(res, {
         code: 2009,
