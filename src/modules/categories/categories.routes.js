@@ -9,7 +9,7 @@ categoryRoutes.post("/getcategoryDetails", requirePermission(["categories",], "v
 categoryRoutes.put("/create", requirePermission(["categories"], "create"), tenantDbMiddleware, categoryController.categoryMaster);
 categoryRoutes.post("/delete", requirePermission(["categories"], "delete"), tenantDbMiddleware, categoryController.changeStatus);
 categoryRoutes.post("/slugList", requirePermission(["categories"], "view"), tenantDbMiddleware, categoryController.getslugList);
-categoryRoutes.post("/changePosition", requirePermission(["categories"], "edit"), tenantDbMiddleware, categoryController.changePosition);
+categoryRoutes.post("/change-position", requirePermission(["categories"], "edit"), tenantDbMiddleware, categoryController.changePosition);
 categoryRoutes.post("/partial-update/:id", requirePermission(["categories"], "edit"), tenantDbMiddleware, categoryController.categoryUpdate);
 categoryRoutes.get("/slug/:slug", requirePermission(["categories"], "view"), tenantDbMiddleware, categoryController.categoryIDBySlug);
 categoryRoutes.get("/:id", requirePermission(["categories"], "view"), tenantDbMiddleware, categoryController.categoryMaster);
