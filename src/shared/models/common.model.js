@@ -174,7 +174,7 @@ export const GetMasterListDetails = async ({ select = "*", table = "", where = [
         const safeStart = Number(start) || 0;
         sql += ` LIMIT ${safeLimit} OFFSET ${safeStart}`;
     }
-    printSql(sql, values)
+    // printSql(sql, values)
 
     const rows = await query(sql, params);
     return rows;
