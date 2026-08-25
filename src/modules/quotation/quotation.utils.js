@@ -7,6 +7,7 @@ export const quotationValidationRules = {
   timeframe: { label: "Timeframe", max: 100 },
   contact_id: { label: "Contact", type: "number" },
   ticket_id: { label: "Ticket", type: "number" },
+  scope_of_work: { label: "Scope of Work" },
   notes: { label: "Notes" },
   terms: { label: "Terms" },
 };
