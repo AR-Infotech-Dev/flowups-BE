@@ -208,6 +208,8 @@ export const getCustomerDetails = async (req, res) => {
           });
         }
 
+
+        const validation = validateBody(req.body, customerValidationRules);
         const data = validation.data;
         const customerContacts = normalizeCustomerContacts(req.body.customer_contacts ?? req.body.contact_persons);
         const contactValidation = validateCustomerContacts(customerContacts);
