@@ -40,6 +40,8 @@ companyRoutes.delete("/:id/signature/remove", requirePermission(['company-master
 companyRoutes.post("/:id/happy-client-logos", requirePermission(['company-master', 'companies'], "edit"), logoUpload.array("logos", 5), companyController.uploadHappyClientLogos);
 companyRoutes.delete("/:id/happy-client-logos/remove", requirePermission(['company-master', 'companies'], "edit"), companyController.removeHappyClientLogos);
 companyRoutes.put("/create", requirePermission(['company-master', 'companies'], "create"), companyController.getCompanyDetails);
+companyRoutes.get("/company-setting/:id", requirePermission(['company-setting'], "view"), companyController.getCompanyDetails);
+companyRoutes.post("/company-setting/:id", requirePermission(['company-setting'], "edit"), companyController.getCompanyDetails);
 companyRoutes.get("/:id", requirePermission(['company-master', 'companies'], "view"), companyController.getCompanyDetails);
 companyRoutes.post("/:id", requirePermission(['company-master', 'companies'], "edit"), companyController.getCompanyDetails);
 companyRoutes.get("/:id/export-db", requirePermission("companies", "view"), companyController.exportCompanyDb);
