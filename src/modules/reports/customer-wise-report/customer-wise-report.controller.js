@@ -158,7 +158,6 @@ export const companyCustomerTicketReport = async (req, res) => {
     const companyId = !isSuperAdmin(req.user)
       ? req.user.company_id
       : body.company_id;
-    console.log('companyId : ', companyId);
 
     if (!companyId) {
       return failureResponse(res, {

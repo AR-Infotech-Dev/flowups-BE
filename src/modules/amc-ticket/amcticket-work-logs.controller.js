@@ -122,7 +122,6 @@ export const create = async (req, res) => {
     try {
         const ticketId = req.body.ticket_id;
         const ticket = await getTicket(ticketId);
-        console.log('ticket :', ticket)
 
         //TICKET REQUIRED
         if (!ticket) {
@@ -172,9 +171,6 @@ export const create = async (req, res) => {
                 data: ticketUpdateData,
                 where: { ticket_id: ticketId },
             });
-            console.log('ticketId:', ticketId);
-            console.log('ticketUpdateData:', ticketUpdateData);
-            console.log('ticket:', ticket);
 
             await notifyTicketUpdates(ticketId, ticketUpdateData, ticket);
 

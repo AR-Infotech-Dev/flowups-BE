@@ -60,7 +60,6 @@ export const getcategoryDetails = async (req, res) => {
         const { select, where, values, join, other } = filterData;
         other.freeTextSearch = searchText;
         other.searchColumns = ["t.categoryName", "t.slug", "t.description"];
-        // console.log(other);
 
         if (!isSuperAdmin(req.user) && req.user.company_id) {
             where.push("t.company_id = ?");
@@ -276,6 +275,7 @@ export const categoryMaster = async (req, res) => {
                 }
 
                 const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", { category_id });
+                // console.log(details[0].is_parent);
 
                 if (!details.length) {
                     return failureResponse(res, {
@@ -283,6 +283,17 @@ export const categoryMaster = async (req, res) => {
                         httpStatus: 404,
                     });
                 }
+                console.log(details[0].is_parent);
+                
+                let sublist = [];
+                if (details[0].is_parent === "yes") {
+                    sublist = await CommonModel.getMasterDetails(MODULE_TABLE, "category_id,categoryName, parent_id,categories_index", { parent_id: category_id });
+                    sublist.sort( (a, b) => Number(a.categories_index || 0) - Number(b.categories_index || 0) );
+                }
+                details[0].children = sublist;
+                // console.log("Parent:", details[0]);
+                // console.log("Children:", sublist);
+
 
                 return successResponse(res, {
                     code: 1004,
@@ -429,13 +440,25 @@ export const getslugList = async (req, res) => {
 // ======================================================
 export const changePosition = async (req, res) => {
     try {
-        const { action = "", menu_ids = [] } = req.body;
+        const {
+            action = "",
+            parent_id = null,
+            menu_ids = [],
+        } = req.body;
 
         if (action.trim() !== "changePositions") {
             return failureResponse(res, {
                 code: 2000,
                 httpStatus: 400,
                 message: "Invalid action",
+            });
+        }
+
+        if (!parent_id) {
+            return failureResponse(res, {
+                code: 2001,
+                httpStatus: 400,
+                message: "parent_id is required",
             });
         }
 
@@ -448,13 +471,17 @@ export const changePosition = async (req, res) => {
         }
 
         for (const [index, categoryId] of menu_ids.entries()) {
+
             await CommonModel.updateMasterDetails({
                 table: MODULE_TABLE,
+
                 data: {
                     categories_index: index + 1,
                 },
+
                 where: {
                     category_id: categoryId,
+                    parent_id: Number(parent_id),
                 },
             });
         }
@@ -464,6 +491,7 @@ export const changePosition = async (req, res) => {
             httpStatus: 200,
             data: [],
         });
+
     } catch (error) {
         return failureResponse(res, {
             code: 2008,

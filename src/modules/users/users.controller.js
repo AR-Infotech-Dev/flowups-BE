@@ -202,7 +202,7 @@ const default_columns = {
     key2: "roleID",
     select: "",
   },
-  default_company: {
+  company_id: {
     table: "company_master",
     alias: "dc",
     column: "company_name",

@@ -9,19 +9,10 @@ import { env } from "node:process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-export const COMPANY_LOGO_DIR = path.resolve(__dirname, "../../../public/images/company-logos");
+export const COMPANY_ASSET_ROOT = path.resolve(__dirname, "../../../public/images/company");
+export const getCompanyAssetDir = (companyId) => path.join(COMPANY_ASSET_ROOT, String(Number(companyId)));
 export const testCompanyDbConnection = async (config) => {
     let connection;
-    console.log(config);
-    console.log({
-        host: config.db_host,
-        port: config.db_port,
-        user: config.db_username,
-        password: config.db_password,
-        database: config.db_name,
-        connectTimeout: 10000,
-    });
-
     try {
         connection = await mysql.createConnection({
             host: config.db_host,
@@ -66,8 +57,10 @@ export const MAIL_PROVIDER_DEFAULTS = {
     yahoo: { smtp_host: "smtp.mail.yahoo.com", smtp_port: "587", smtp_encryption: "tls" },
     outlook: { smtp_host: "smtp.office365.com", smtp_port: "587", smtp_encryption: "tls" },
 };
-export const ensureCompanyLogoDir = () => {
-    fsp.mkdirSync(COMPANY_LOGO_DIR, { recursive: true });
+export const ensureCompanyAssetDir = (companyId) => {
+    const directory = getCompanyAssetDir(companyId);
+    fs.mkdirSync(directory, { recursive: true });
+    return directory;
 };
 export const companyValidationRules = {
     company_id: { label: "Company ID", type: "number" },
@@ -102,6 +95,7 @@ export const companyValidationRules = {
     google_review_link: { label: "Google Review Link"},
     status: { label: "Status" },
 
+
     own_db_enabled: { label: "Own DB Enabled" },
     db_type: { label: "DB Type" },
     db_host: { label: "DB Host" },
@@ -111,6 +105,13 @@ export const companyValidationRules = {
     db_password: { label: "DB Password" },
     db_ssl_enabled: { label: "SSL enabled" },
     db_status: { label: "DB Status" },
+
+    bank_name: { label: "Bank Name" },
+    account_number: { label: "Account Number" },
+    ifsc_code: { label: "IFSC code" },
+    branch: { label: "Branch" },
+    quotation_terms: { label: "Quotation Terms" },
+    authority_sign: { label: "Authorized Signature" },
 };
 export const mailTestValidationRules = {
     company_id: { label: "Company ID", type: "number" },

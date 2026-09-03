@@ -59,7 +59,7 @@ export const getMasterDetails = async (table = "", select = "*", where = {}, joi
     if (conditions.length) {
         sql += ` WHERE ${conditions.join(" AND ")}`;
     }
-    printSql(sql, values)
+    // printSql(sql, values)
     return await query(sql, values);
 };
 export const getSpecificDetails = async (table = "", select = "*", where = {}) => {
@@ -174,7 +174,8 @@ export const GetMasterListDetails = async ({ select = "*", table = "", where = [
         const safeStart = Number(start) || 0;
         sql += ` LIMIT ${safeLimit} OFFSET ${safeStart}`;
     }
-    
+    // printSql(sql, values)
+
     const rows = await query(sql, params);
     return rows;
 };
@@ -271,14 +272,8 @@ export const deleteMasterDetails = async ({ table = "", where = {} } = {}) => {
 // =====================================
 export const changeMasterStatus = async ({ table = "", status = "delete", ids = [], key = "adminID" } = {}) => {
     const placeholders = ids.map(() => "?").join(",");
-
-    const sql = `
-    UPDATE ${DB_PREFIX}${table}
-    SET status = ?
-    WHERE ${key} IN (${placeholders})
-  `;
-
-    const [result] = await query(sql, [status, ...ids]);
+    const sql = ` UPDATE ${DB_PREFIX}${table} SET status = ? WHERE ${key} IN (${placeholders}) `;
+    const result = await query(sql, [status, ...ids]);
     return result;
 };
 
