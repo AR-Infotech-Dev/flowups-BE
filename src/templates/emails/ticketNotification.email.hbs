@@ -53,15 +53,23 @@
     {{#if redirectUrl}}
     <p style="margin:14px 0;text-align:center;">
       <a href="{{redirectUrl}}"
-        style="background:#0d6efd;color:#ffffff;text-decoration:none;padding:8px 18px;border-radius:6px;display:inline-block;font-weight:bold;">Submit
+        style="background:#0d6efd;color:#ffffff;text-decoration:none;padding:8px 18px;border-radius:6px;display:inline-block;font-weight:bold; margin-right:12px;">Submit
         {{redirectUrlText}}</a>
-    </p>
+   
     {{/if}}
 
+    
+    {{#if googleReviewEnabled}}
+    <a href="{{googleReviewUrl}}" target="_blank" rel="noopener noreferrer"
+      style="background:#ebdd22;color:#ffffff;text-decoration:none;padding:8px 18px;border-radius:6px;display:inline-block;font-weight:bold; ">
+      Google Review
+    </a>
+    {{/if}}
+    </p>
     <p>Regards,<br /><strong>Support Team</strong><br />{companyName}</p>
 
   </div>
-  <div style="background:#f8f9fa;padding:12px;text-align:center;font-size:12px;color:#666;">
+  <div style="background:#f8f9fa;padding:12px;text-align:center;font-size:12px;color:#666; margin-top: 50px;">
     This is an automated email. Please do not reply.
   </div>
 </div>

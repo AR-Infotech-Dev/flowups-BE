@@ -347,7 +347,7 @@ export const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {})
   }
   if (data?.ticket_status && oldDetails.old_ticket_status !== data.ticket_status) {
     if (parseInt(data.ticket_status) === parseInt(TICKET_STATUS_CLOSE)) {
-      await closeTicketWithFeedback(ticket_id, data.modified_by, data.ticket_no);
+      await closeTicketWithFeedback(ticket_id,data.company_id, data.modified_by, data.ticket_no);
     } else {
       const cb = data.created_by || oldDetails.created_by;
       const tn = data.ticket_no || oldDetails.ticket_no;
@@ -371,7 +371,7 @@ export const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {})
   }
 };
 // Notification On Ticket Close
-const closeTicketWithFeedback = async (ticket_id, modifiedById, ticketNo = "") => {
+const closeTicketWithFeedback = async (ticket_id, company_id, modifiedById, ticketNo = "") => {
   const feedbackToken = createFeedbackToken();
   const modifiedBy = await getAdminName(modifiedById);
   const ticket = await getTicketRecord(ticket_id, "*");
@@ -386,11 +386,3 @@ const closeTicketWithFeedback = async (ticket_id, modifiedById, ticketNo = "") =
 
   await sendEmailToClient(ticket_id, "Ticket is Closed !", "We would like to inform you that your support ticket has been closed.", feedbackUrl);
 };
-
-
-
-
-
-
-
-
