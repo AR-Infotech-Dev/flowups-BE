@@ -155,7 +155,7 @@ export const getSummary = async ({ body, user }) => {
         COALESCE(SUM(CASE WHEN t.ticket_status <> ? THEN 1 ELSE 0 END), 0) AS pending,
         COALESCE(SUM(CASE WHEN t.due_date < CURRENT_DATE AND t.ticket_status <> ? THEN 1 ELSE 0 END), 0) AS overdue,
         COALESCE(ROUND(AVG(CASE WHEN t.ticket_status = ? THEN TIMESTAMPDIFF(HOUR, t.created_date, COALESCE(cl.closed_at, t.modified_date)) END), 1), 0) AS avg_resolution_time
-      FROM ${DB_PREFIX}tickets t
+      FROM ${DB_PREFIX}tickets t  
       LEFT JOIN (
         SELECT ticket_id, MIN(created_date) AS closed_at
         FROM ${DB_PREFIX}ticket_history

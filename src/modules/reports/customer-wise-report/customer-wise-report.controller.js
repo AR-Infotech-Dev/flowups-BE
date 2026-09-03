@@ -78,19 +78,11 @@ const getCustomerwiseTickets = async ({ companyId, body, isExport = false, }) =>
         COALESCE(SUM(CASE WHEN t.ticket_status = 205 THEN 1 ELSE 0 END),0) AS open_tickets,
         COALESCE(SUM(CASE WHEN t.ticket_status IN (206,210) THEN 1 ELSE 0 END),0) AS in_progress_tickets,
         COALESCE(SUM(CASE WHEN t.ticket_status = ? THEN 1 ELSE 0 END),0) AS closed_tickets,
-        COALESCE(SUM(
-            CASE
-                WHEN t.ticket_id IS NOT NULL
-                AND t.due_date < CURRENT_DATE
-                AND t.ticket_status <> ?
-                THEN 1
-                ELSE 0
-            END
-        ),0) AS overdue_tickets
+        COALESCE(SUM( CASE WHEN t.ticket_id IS NOT NULL AND t.due_date < CURRENT_DATE AND t.ticket_status <> ? THEN 1 ELSE 0 END ),0) AS overdue_tickets
       FROM ${DB_PREFIX}customer c
       LEFT JOIN ${DB_PREFIX}tickets t
       ON ${joinSql}
-      WHERE ${whereSql}
+      WHERE ${whereSql} 
       `,
     [CLOSED_STATUS, CLOSED_STATUS, ...ticketValues, ...customerValues]
   ),
@@ -108,15 +100,7 @@ const getCustomerwiseTickets = async ({ companyId, body, isExport = false, }) =>
           COALESCE(SUM(CASE WHEN t.ticket_status=205 THEN 1 ELSE 0 END),0) open_tickets,
           COALESCE(SUM(CASE WHEN t.ticket_status IN (206,210) THEN 1 ELSE 0 END),0) in_progress_tickets,
           COALESCE(SUM(CASE WHEN t.ticket_status=? THEN 1 ELSE 0 END),0) closed_tickets,
-          COALESCE(SUM(
-              CASE
-                  WHEN t.ticket_id IS NOT NULL
-                  AND t.due_date<CURRENT_DATE
-                  AND t.ticket_status<>?
-                  THEN 1
-                  ELSE 0
-              END
-          ),0) overdue_tickets,
+          COALESCE(SUM( CASE WHEN t.ticket_id IS NOT NULL AND t.due_date<CURRENT_DATE AND t.ticket_status<>? THEN 1 ELSE 0 END ),0) overdue_tickets,
           MAX(t.created_date) last_ticket_date,
           SUBSTRING_INDEX(
               GROUP_CONCAT(t.ticket_no ORDER BY t.created_date DESC,t.ticket_id DESC),

@@ -10,10 +10,13 @@ import productExpiryReportRoutes from "./product-expiry-report/product-expiry-re
 import workReportRoutes from "./work-report/work-report.routes.js";
 import { tenantDbMiddleware } from "#middlewares/ownDB.middleware.js";
 import userWiseAttendanceReportRoutes from "./user-wise-attendance-report/user-wise-attendance-report.routes.js";
+import userWisePerformanceReportRoutes from "./user-wise-performance-report/user-wise-performance-report.routes.js";
+
 const reportsRoutes = express.Router();
 
 // USERS
 reportsRoutes.use("/user-performance", tenantDbMiddleware, performanceReportRoutes);
+reportsRoutes.use("/user-performances", tenantDbMiddleware, userWisePerformanceReportRoutes);
 reportsRoutes.use("/work-report", tenantDbMiddleware, workReportRoutes);
 reportsRoutes.use("/attendance", tenantDbMiddleware, attendanceReportRoutes);
 
@@ -31,5 +34,6 @@ reportsRoutes.post("/customer-wise-report-excel", requirePermission(["customers"
 // PRODUCTS
 reportsRoutes.use("/product-expiry", tenantDbMiddleware, productExpiryReportRoutes);
 
-reportsRoutes.use( "/user-wise-attendance", tenantDbMiddleware,userWiseAttendanceReportRoutes );
+reportsRoutes.use("/user-wise-attendance", tenantDbMiddleware, userWiseAttendanceReportRoutes);
+
 export default reportsRoutes;
