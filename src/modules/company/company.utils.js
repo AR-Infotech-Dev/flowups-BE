@@ -91,6 +91,8 @@ export const companyValidationRules = {
     ticket_yearly_reset: { label: "Ticket Yearly Reset" },
     ticket_prefix_padding: { label: "Padding", type: "number" },
     ticket_no_reset: { label: "Reset Preference" },
+    google_review_enabled: {label: "Google Review Enabled"},
+    google_review_link: { label: "Google Review Link"},
     status: { label: "Status" },
 
 
@@ -106,7 +108,7 @@ export const companyValidationRules = {
 
     bank_name: { label: "Bank Name" },
     account_number: { label: "Account Number" },
-    ifsc_code: { label: "IFSC code" },
+    ifsc_code: { label: "IFSC code" }, 
     branch: { label: "Branch" },
     quotation_terms: { label: "Quotation Terms" },
     authority_sign: { label: "Authorized Signature" },
@@ -174,5 +176,3 @@ export const dumpTable = ({ table, where, outputFile }) => new Promise((resolve,
         });
     });
 });
-
-
