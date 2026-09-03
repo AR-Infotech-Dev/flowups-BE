@@ -108,7 +108,7 @@ export const companyValidationRules = {
 
     bank_name: { label: "Bank Name" },
     account_number: { label: "Account Number" },
-    ifsc_code: { label: "IFSC code" },
+    ifsc_code: { label: "IFSC code" }, 
     branch: { label: "Branch" },
     quotation_terms: { label: "Quotation Terms" },
     authority_sign: { label: "Authorized Signature" },
