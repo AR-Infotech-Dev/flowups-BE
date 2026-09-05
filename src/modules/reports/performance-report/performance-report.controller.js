@@ -665,7 +665,7 @@ export const exportUserPerformanceExcel = async (req, res) => {
     const attachment = await buildPerformanceExcelAttachment({ filters: body, summary, tickets, user: userDetails });
     return sendExcelDownload(res, attachment);
   } catch (error) {
-    console.log("error : ", error);
+    console.error("error : ", error);
 
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }

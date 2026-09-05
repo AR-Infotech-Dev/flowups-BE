@@ -212,7 +212,7 @@ export const submitTicketFeedback = async (req, res) => {
     });
 
   } catch (error) {
-    console.log("Error in submitTicketFeedback:", error);
+    console.error("Error in submitTicketFeedback:", error);
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,

@@ -68,7 +68,7 @@ const getUserwiseTickets = async ({
     : `LIMIT ${safeLimit} OFFSET ${offset}`;
 
   // QUERIES
- 
+
   const [
     companyRows,
     countRows,
@@ -77,7 +77,7 @@ const getUserwiseTickets = async ({
   ] = await Promise.all([
 
     // COMPANY
-    
+
     query(
       `
         SELECT
@@ -90,8 +90,8 @@ const getUserwiseTickets = async ({
       [companyId]
     ),
 
-   // USER COUNT
-   
+    // USER COUNT
+
     query(
       `
         SELECT COUNT(*) AS total
@@ -102,7 +102,7 @@ const getUserwiseTickets = async ({
     ),
 
     // SUMMARY
-  
+
     query(
       `
         SELECT
@@ -294,9 +294,6 @@ const getUserwiseTickets = async ({
       ]
     ),
   ]);
-  console.log("🔥 USER ROWS:", userRows);
-  console.log("🔥 COUNT ROWS:", countRows);
-  console.log("🔥 SUMMARY ROWS:", summaryRows);
   const total = Number(countRows[0]?.total || 0);
   const usersWithSummary = await Promise.all(
     userRows.map(async (userRow) => {
@@ -310,19 +307,12 @@ const getUserwiseTickets = async ({
         user,
       });
 
-      console.log(
-        `🔥 SUMMARY FOR USER ${userRow.user_id} - ${userRow.user_name}:`,
-        summary
-      );
-
       return {
         ...userRow,
         ...summary,
       };
     })
   );
-  console.log('usersWithSummary : ', usersWithSummary);
-
   return {
     company: companyRows[0] || {
       company_id: companyId,
@@ -365,8 +355,8 @@ export const companyUserTicketReport = async (req, res) => {
         message: "Company is required.",
       });
     }
-   const report = await getUserwiseTickets({ companyId, body, user: req.user, isExport: false, });
-   return successResponse(res, {
+    const report = await getUserwiseTickets({ companyId, body, user: req.user, isExport: false, });
+    return successResponse(res, {
       code: 1004,
       httpStatus: 200,
       data: report,
@@ -405,13 +395,6 @@ export const exportUserwiseReportExcel = async (req, res) => {
       body,
       isExport: true,
     });
-
-    console.log({
-      company,
-      users,
-      filters,
-      summary,
-    });
     const attachment = await buildUserWiseExcelAttachment({
       company,
       users,
@@ -420,7 +403,7 @@ export const exportUserwiseReportExcel = async (req, res) => {
     });
     return sendExcelDownload(res, attachment);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,

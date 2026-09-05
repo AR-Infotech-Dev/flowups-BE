@@ -275,7 +275,6 @@ export const categoryMaster = async (req, res) => {
                 }
 
                 const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", { category_id });
-                // console.log(details[0].is_parent);
 
                 if (!details.length) {
                     return failureResponse(res, {
@@ -283,17 +282,12 @@ export const categoryMaster = async (req, res) => {
                         httpStatus: 404,
                     });
                 }
-                console.log(details[0].is_parent);
-                
                 let sublist = [];
                 if (details[0].is_parent === "yes") {
                     sublist = await CommonModel.getMasterDetails(MODULE_TABLE, "category_id,categoryName, parent_id,categories_index", { parent_id: category_id });
                     sublist.sort( (a, b) => Number(a.categories_index || 0) - Number(b.categories_index || 0) );
                 }
                 details[0].children = sublist;
-                // console.log("Parent:", details[0]);
-                // console.log("Children:", sublist);
-
 
                 return successResponse(res, {
                     code: 1004,

@@ -421,7 +421,7 @@ export const createAmcCall = async (req, res) => {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "AMC customer not found" });
     }
 
-    const ticketNo = await generateTicketNumber({ companyId :req.user.company_id });
+    const ticketNo = await generateTicketNumber({ companyId: req.user.company_id });
     const today = new Date().toISOString().split("T")[0];
     const source = prepareTicketBody({
       ...req.body,
@@ -486,7 +486,7 @@ export const createProductExpiryCall = async (req, res) => {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "AMC customer not found" });
     }
 
-    const ticketNo = await generateTicketNumber({ companyId :req.user.company_id });
+    const ticketNo = await generateTicketNumber({ companyId: req.user.company_id });
     const today = new Date().toISOString().split("T")[0];
     const source = prepareTicketBody({
       ...req.body,
@@ -557,8 +557,8 @@ export const createAmcVisit = async (req, res) => {
       return failureResponse(res, { code: 2004, httpStatus: 404, message: "AMC customer not found" });
     }
 
-    const ticketNo = await generateTicketNumber({ companyId :req.user.company_id });
-    
+    const ticketNo = await generateTicketNumber({ companyId: req.user.company_id });
+
     const today = new Date().toISOString().split("T")[0];
     const assignee = req.body.employee_id || req.body.assignee || customer.responsible_person || req.user.adminID || null;
     const ticketSource = prepareTicketBody({
@@ -603,7 +603,7 @@ export const createAmcVisit = async (req, res) => {
 
     notifyVisitScheduled({ ticket, visit: visitData, visitId, })
       .catch((error) => {
-        console.log("Visit notification error :", error.message);
+        console.error(error.message);
       });
 
     return successResponse(res, {
@@ -932,7 +932,7 @@ export const sendReminder = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
 
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }

@@ -100,22 +100,14 @@ export const list = async (req, res) => {
       ? await listTickets({ select, where, values, join, other })
       : await listTickets({ select: select + ',fd.rating as ratings', where, values, join, other, limit, start });
 
-    console.log("rows : ", rows);
-
     if (shouldFilterByAssignee && rows.length) {
       const historyRows = await getTicketVisibilityRows(rows.map((row) => row.ticket_id), userId);
-
-      console.log(historyRows);
-
       const historyByTicket = new Map();
       historyRows.forEach((history) => {
         const list = historyByTicket.get(history.ticket_id) || [];
         list.push(history);
         historyByTicket.set(history.ticket_id, list);
       });
-
-      console.log(historyByTicket);
-
       rows.forEach((row) => {
         const ticketHistory = historyByTicket.get(row.ticket_id) || [];
         const delegated = ticketHistory.some(
@@ -147,7 +139,7 @@ export const list = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log('error :', error);
+    console.error('error :', error);
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };
@@ -368,7 +360,7 @@ export const notifyTicketUpdates = async (ticket_id, data = {}, oldDetails = {})
   }
   if (data?.ticket_status && oldDetails.old_ticket_status !== data.ticket_status) {
     if (parseInt(data.ticket_status) === parseInt(TICKET_STATUS_CLOSE)) {
-      await closeTicketWithFeedback(ticket_id,data.company_id, data.modified_by, data.ticket_no);
+      await closeTicketWithFeedback(ticket_id, data.company_id, data.modified_by, data.ticket_no);
     } else {
       const cb = data.created_by || oldDetails.created_by;
       const tn = data.ticket_no || oldDetails.ticket_no;
