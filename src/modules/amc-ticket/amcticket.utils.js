@@ -101,7 +101,7 @@ export const emitNotification = (userId = null, data = {}) => {
     const io = getIO();
     io.to(`user_${userId}`).emit("new_notification", data);
   } catch (error) {
-    console.log("Socket Error :", error.message);
+    console.error("Socket Error :", error.message);
   }
 };
 

@@ -199,11 +199,10 @@ export const exportCustomerwiseReportExcel = async (req, res) => {
       });
     }
     const {company, customers, filters, summary} = await getCustomerwiseTickets({ companyId, body, isExport: true, });
-    console.log({company, customers, filters, summary});
     const attachment = await buildCustomerWiseExcelAttachment({ company, customers, filters, summary });
     return sendExcelDownload(res, attachment);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };

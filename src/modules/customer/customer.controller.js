@@ -337,9 +337,6 @@ export const getCustomerDetails = async (req, res) => {
 export const changeStatus = async (req, res) => {
   try {
     const { action = "", ids = [] } = req.body;
-    console.log("Delete Action :", action);
-    console.log("Customer IDs :", ids);
-
     if (action.trim().toLowerCase() !== "delete") {
       return failureResponse(res, {
         code: 2000,
@@ -366,7 +363,7 @@ export const changeStatus = async (req, res) => {
       data: [],
     });
   } catch (error) {
-    console.log(' error:', error);
+    console.error(' error:', error);
 
     return failureResponse(res, {
       code: 2008,

@@ -86,7 +86,6 @@ export const getFreeTextSearch = async (req, res) => {
         });
       }
       const columns = String(wherec).split(",").map((column) => column.trim()).filter(Boolean);
-      console.log('columns : ',columns);
       
       if (!columns.length) {
         return failureResponse(res, {
@@ -334,7 +333,7 @@ export const getslugList = async (req, res) => {
     });
 
   } catch (error) {
-    console.log(error);
+    console.error(error);
 
     return failureResponse(res, {
       code: 2008,

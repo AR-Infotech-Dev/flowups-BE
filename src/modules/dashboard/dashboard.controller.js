@@ -13,7 +13,7 @@ export const overview = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     
     return failureResponse(res, {
       code: 2008,

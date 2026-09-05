@@ -149,7 +149,7 @@ export const login = async (req, res) => {
     });
 
   } catch (error) {
-    console.log('error : ', error);
+    console.error('error : ', error);
 
     return failureResponse(res, {
       code: 2008,
