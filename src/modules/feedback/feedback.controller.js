@@ -193,16 +193,14 @@ export const submitTicketFeedback = async (req, res) => {
        UPDATE TICKET FLAG
     ===================================== */
     await CommonModel.updateMasterDetails({
-      table: "ticket_feedback",
+      table: "tickets",
       data: {
         feedback_submitted: "y",
-        modified_date: toMysqlDateTime(),
       },
       where: {
         ticket_id,
       },
     });
-
     /* =====================================
        SUCCESS
     ===================================== */
@@ -214,6 +212,7 @@ export const submitTicketFeedback = async (req, res) => {
     });
 
   } catch (error) {
+    console.error("Error in submitTicketFeedback:", error);
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,
@@ -242,4 +241,3 @@ export const getReviewRatings = async (req, res) => {
     });
   }
 };
-

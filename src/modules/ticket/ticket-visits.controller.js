@@ -57,7 +57,7 @@ const emitNotification = (userId = null, data = {}) => {
         const io = getIO();
         io.to(`user_${userId}`).emit("new_notification", data);
     } catch (error) {
-        console.log("Visit Socket Error :", error.message);
+        console.error("Visit Socket Error :", error.message);
     }
 };
 
@@ -226,7 +226,7 @@ export const create = async (req, res) => {
 
         notifyVisitScheduled({ ticket, visit: data, visitId, })
             .catch((error) => {
-                console.log("Visit notification error :", error.message);
+                console.error("Visit notification error :", error.message);
             });
 
         return successResponse(res, {

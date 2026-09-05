@@ -275,7 +275,7 @@ export const testDBConfig = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
 
     return failureResponse(res, {
       code: 2008,
@@ -569,13 +569,20 @@ export const getCompanyDetails = async (req, res) => {
             message: validation.message,
           });
         }
-
         const data = validation.data;
+
+        if (data.google_review_enabled === "y" && !data.google_review_link?.trim()) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: "Google Review Link is required",
+          });
+        }
+
         delete data.company_id;
         data.created_by = req.user.adminID;
         data.created_date = toMysqlDateTime();
         data.status = data.status || "active";
-
         const result = await CommonModel.saveMasterDetails({
           table: MODULE_TABLE,
           data,
@@ -587,7 +594,6 @@ export const getCompanyDetails = async (req, res) => {
           });
         });
         clearCompanyMailerCache(result.insertId);
-
         return successResponse(res, {
           code: 1001,
           httpStatus: 201,
@@ -596,7 +602,6 @@ export const getCompanyDetails = async (req, res) => {
           },
         });
       }
-
       case "POST": {
         if (!company_id) {
           return failureResponse(res, {
@@ -604,7 +609,6 @@ export const getCompanyDetails = async (req, res) => {
             httpStatus: 404,
           });
         }
-
         const validation = validateBody(req.body, companyValidationRules);
         if (!validation.isValid) {
           return failureResponse(res, {
@@ -615,11 +619,17 @@ export const getCompanyDetails = async (req, res) => {
         }
         const dataforsync = validation.data;
         const data = validation.data;
+        if (data.google_review_enabled === "y" && !data.google_review_link?.trim()) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: "Google Review Link is required",
+          });
+        }
 
         delete data.company_id;
         delete data.created_by;
         delete data.created_date;
-
         data.modified_by = req.user.adminID;
         data.modified_date = toMysqlDateTime();
         dataforsync.modified_by = req.user.adminID;
@@ -631,7 +641,6 @@ export const getCompanyDetails = async (req, res) => {
           data,
           where: { company_id },
         });
-
         await syncToTenant(company_id, async () => {
           const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", {
             company_id,
@@ -657,7 +666,6 @@ export const getCompanyDetails = async (req, res) => {
           });
         }
         clearCompanyMailerCache(company_id);
-
         return successResponse(res, {
           code: 1002,
           httpStatus: 200,
@@ -792,8 +800,7 @@ export const exportCompanyDb = async (req, res) => {
       fs.unlink(outputFile, () => { });
     });
   } catch (error) {
-    console.log('error : ', error);
-    
+    console.error('error : ', error);
     fs.unlink(outputFile, () => { });
     return res.status(500).json({
       success: false,

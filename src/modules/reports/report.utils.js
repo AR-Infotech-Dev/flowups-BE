@@ -1,3 +1,10 @@
+import { renderTemplate } from "#shared/utils/templateMaker.js";
+import {
+  buildSheetSpacerRow,
+  buildSideBySideRows,
+  excelFormat,
+} from "#shared/utils/excel.utils.js";
+
 export const CLOSED_TICKET_STATUS = "208";
 
 export const normalizeReportOrder = (value = "DESC") =>
@@ -54,4 +61,107 @@ export const formatDateTime = (value) => {
     minute: "2-digit",
     hour12: true,
   });
+};
+export const buildUserWiseExcelAttachment = async ({
+  company = {},
+  users = [],
+  filters = {},
+  summary = {},
+}) => {
+  const spreadsheetColumnCount = 13;
+
+  const details = {
+    "Company ID": company.company_id || "-",
+    "Company Name": company.company_name || "-",
+    "From Date": filters.from_date || "-",
+    "To Date": filters.to_date || "-",
+  };
+
+  const summaryDetails = {
+    "Total Users": Number(summary.total_users) || Number(0),
+    "Users With Tickets": summary.users_with_tickets || 0,
+    "Users Without Tickets": summary.users_without_tickets || 0,
+    "Total Tickets": summary.total_tickets || 0,
+    "Open": summary.open_tickets || 0,
+    "Closed": summary.closed_tickets || 0,
+    "In Progress": summary.in_progress_tickets || 0,
+    "Overdue": summary.overdue_tickets || 0,
+  };
+
+  const htmlBody = await renderTemplate(
+    "userwisePerformanceReport",
+    "excel",
+    {
+      spreadsheetColumnCount,
+
+      reportTitle: "User Wise Performance Report",
+
+      spacerRow: await buildSheetSpacerRow(
+        18,
+        spreadsheetColumnCount
+      ),
+
+      summarySection: await buildSideBySideRows({
+        leftTitle: "Summary",
+        leftData: summaryDetails,
+        rightTitle: "Report Details",
+        rightData: details,
+        gapCols: 7,
+        labelColspan: 1,
+        valueColspan: 2,
+      }),
+
+      hasUserRows: users.length > 0,
+
+      userRows: users.map((row, index) => ({
+        srNo: index + 1,
+
+        user_name: row.user_name || "-",
+
+        total_tickets: row.total_tickets ?? 0,
+
+        generated: row.generated ?? 0,
+
+        open_tickets: row.open_tickets ?? 0,
+
+        pending: row.pending ?? 0,
+
+        delegated: row.delegated ?? 0,
+
+        in_progress_tickets:
+          row.in_progress_tickets ?? 0,
+
+        closed_tickets:
+          row.closed_tickets ?? 0,
+
+        overdue_tickets:
+          row.overdue_tickets ?? 0,
+
+        productivity_score:
+          row.productivity_score != null
+            ? `${row.productivity_score}%`
+            : "0%",
+
+        last_ticket_no:
+          row.last_ticket_no || "-",
+
+        last_ticket_status:
+          row.last_ticket_status || "-",
+
+        last_ticket_date:
+          formatDateTime(row.last_ticket_date),
+      })),
+    }
+  );
+
+  return {
+    filename: `User-wise-report${company.company_name
+        ? "-" + company.company_name
+        : ""
+      }.xls`,
+
+    content: await excelFormat(htmlBody),
+
+    contentType: "application/vnd.ms-excel",
+  };
 };

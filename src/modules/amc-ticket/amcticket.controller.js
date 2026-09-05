@@ -125,8 +125,7 @@ export const list = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log('error :', error);
-
+    console.error(error);
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };

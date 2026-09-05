@@ -267,7 +267,7 @@ export const exportUserWiseAttendanceExcel = async (req, res) => {
     const attachment = await buildUserWiseAttendanceExcelAttachment({ company, users, filters, summary });
     return sendExcelDownload(res, attachment);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };

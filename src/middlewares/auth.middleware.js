@@ -24,7 +24,7 @@ import { getActiveSessionId } from "#shared/utils/activeSession.js";
 //         next();
 
 //     } catch (error) {
-//         console.log(error);
+//         console.error(error);
 //         return failureResponse(res, {
 //             code: 2007,
 //             httpStatus: 401,
@@ -74,7 +74,7 @@ export const verifyToken = async (req, res, next) => {
 
     return next();
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, {
       code: 2007,
       httpStatus: 401,
