@@ -1,5 +1,6 @@
 import { DB_PREFIX } from "#config/database.js";
 import { env } from "#config/env.js";
+import * as CommonModel from "#shared/models/common.model.js";
 import { getIO } from "#socket/index.js";
 import { sendEmail } from "#shared/utils/email.js";
 import { renderTemplate } from "#shared/utils/templateMaker.js";
@@ -101,11 +102,11 @@ export const emitNotification = (userId = null, data = {}) => {
     const io = getIO();
     io.to(`user_${userId}`).emit("new_notification", data);
   } catch (error) {
-    console.log("Socket Error :", error.message);
+    console.error("Socket Error :", error.message);
   }
 };
 
-export const sendEmailToClient = async (ticketId, subject = "", message = "", redirectUrl = "") => {
+export const sendEmailToClient = async (ticketId, subject = "", message = "", redirectUrl = "", is) => {
   if (!ticketId) {
     return { success: false, message: "Ticket ID is required" };
   }
@@ -114,11 +115,27 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
   if (!details) {
     return { success: false, message: "Ticket details not found" };
   }
+  const company = await CommonModel.getMasterDetails(
+    "company_master",
+    "google_review_enabled, google_review_link",
+    {
+      company_id: details.company_id,
+    }
+  );
+
+  const googleReviewEnabled =
+    company.length > 0 &&
+    company[0].google_review_enabled === "y" &&
+    !!company[0].google_review_link?.trim();
+
+  const googleReviewUrl =
+    company.length > 0
+      ? company[0].google_review_link || ""
+      : "";
 
   if (!details.email || details.email.trim() === "") {
     return { success: false, message: "Client email not found" };
   }
-
   const html = await renderTemplate("ticketNotification", "email", {
     clientName: details.clientName || "User",
     ticketNo: details.ticket_no || "-",
@@ -128,12 +145,17 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
     assignedTo: details.assignedTo || "-",
     message: message || "Your ticket has been updated successfully.",
     category: details.query_type || "-",
+    contact_person: details.contact_person || "-",
+    contact_no: details.contact_no || "-",
     status: details.ticket_status || "-",
     priority: details.ticket_priority || "-",
     description: details.description || "-",
     appName: env?.appName || "Support System",
     redirectUrl,
     redirectUrlText: "Feedback",
+
+    googleReviewEnabled,
+    googleReviewUrl,
   });
 
   const result = await sendEmail({

@@ -8,5 +8,5 @@ const server = http.createServer(app); // ✅
 initSocket(server); // ✅
 
 server.listen(env.port, "0.0.0.0", () => {
-  console.log(`${env.appName} listening on port ${env.port}`);
+  console.info(`${env.appName} listening on port ${env.port}`);
 });

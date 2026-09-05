@@ -83,11 +83,16 @@ export const renderTemplate = async (name, type, data = {}) => {
     const folderMap = {
         email: "emails",
         excel: "excels",
+        preview: "previews",
     };
     const extensionMap = {
         email: ".email.hbs",
         excel: ".excel.hbs",
+        preview: ".preview.hbs",
     };
+    if (!folderMap[type] || !extensionMap[type]) {
+        throw new Error(`Unsupported template type: ${type}`);
+    }
     const templatePath = path.join(
         __dirname,
         "../../templates",

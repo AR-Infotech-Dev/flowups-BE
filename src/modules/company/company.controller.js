@@ -4,7 +4,7 @@ import { prepareFilterData } from "#shared/utils/filter.builder.js";
 import { toMysqlDateTime } from "#shared/utils/dateTime.js";
 import { validateBody } from "#shared/utils/bodyValidator.js";
 import { clearCompanyMailerCache, testSmtpConnection } from "#shared/utils/email.js";
-import { COMPANY_LOGO_DIR, companyValidationRules, dbTestValidationRules, dumpTable, ensureCompanyLogoDir, getLogoExtension, mailTestValidationRules, normalizeMailConfig, testCompanyDbConnection } from "./company.utils.js";
+import { companyValidationRules, dbTestValidationRules, dumpTable, ensureCompanyAssetDir, getCompanyAssetDir, getLogoExtension, mailTestValidationRules, normalizeMailConfig, testCompanyDbConnection } from "./company.utils.js";
 import { env } from "process";
 import path from "node:path";
 import os from "node:os";
@@ -275,7 +275,7 @@ export const testDBConfig = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
 
     return failureResponse(res, {
       code: 2008,
@@ -295,14 +295,14 @@ export const uploadCompanyLogo = async (req, res) => {
       });
     }
 
-    const companyId = req.params.id || req.body.company_id || null;
+    const companyId = Number(req.params.id || req.body.company_id);
+    if (!companyId) return failureResponse(res, { code: 2001, httpStatus: 400, message: "Save the company before uploading its logo" });
     const extension = getLogoExtension(req.file);
-    const safeCompanyPart = companyId ? `company-${companyId}` : "company-new";
-    const fileName = `${safeCompanyPart}-${Date.now()}${extension}`;
-    const relativePath = `/images/company-logos/${fileName}`;
-    const absolutePath = path.join(COMPANY_LOGO_DIR, fileName);
+    const fileName = `logo-${Date.now()}${extension}`;
+    const relativePath = `/images/company/${companyId}/${fileName}`;
+    const assetDirectory = ensureCompanyAssetDir(companyId);
+    const absolutePath = path.join(assetDirectory, fileName);
 
-    ensureCompanyLogoDir();
     fs.writeFileSync(absolutePath, req.file.buffer);
 
     if (companyId) {
@@ -425,6 +425,132 @@ export const removeCompanyLogo = async (req, res) => {
     });
   }
 };
+
+export const uploadCompanySignature = async (req, res) => {
+  try {
+    const companyId = Number(req.params.id);
+    if (!companyId || !req.file?.buffer) {
+      return failureResponse(res, { code: 2001, httpStatus: 400, message: "Company and signature image are required" });
+    }
+
+    const companies = await CommonModel.getMasterDetails(MODULE_TABLE, "authority_sign", { company_id: companyId });
+    if (!companies.length) {
+      return failureResponse(res, { code: 2004, httpStatus: 404, message: "Company not found" });
+    }
+
+    const assetDirectory = ensureCompanyAssetDir(companyId);
+    const extension = getLogoExtension(req.file);
+    const fileName = `signature-${Date.now()}${extension}`;
+    const relativePath = `/images/company/${companyId}/${fileName}`;
+    fs.writeFileSync(path.join(assetDirectory, fileName), req.file.buffer);
+
+    const previousPath = companies[0].authority_sign;
+    if (previousPath) {
+      const previousFile = path.resolve(process.cwd(), previousPath.replace(/^\/+/, ""));
+      if (fs.existsSync(previousFile)) fs.unlinkSync(previousFile);
+    }
+
+    const updateData = { authority_sign: relativePath, modified_by: req.user.adminID, modified_date: toMysqlDateTime() };
+    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } });
+    await syncToTenant(companyId, async () => {
+      await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } });
+    });
+
+    return successResponse(res, {
+      code: 1002,
+      httpStatus: 200,
+      message: "Authorized signature uploaded successfully",
+      data: { data: { authority_sign: relativePath } },
+    });
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+
+export const removeCompanySignature = async (req, res) => {
+  try {
+    const companyId = Number(req.params.id);
+    const companies = await CommonModel.getMasterDetails(MODULE_TABLE, "authority_sign", { company_id: companyId });
+    if (!companies.length) {
+      return failureResponse(res, { code: 2004, httpStatus: 404, message: "Company not found" });
+    }
+
+    const signaturePath = companies[0].authority_sign;
+    if (signaturePath) {
+      const signatureFile = path.resolve(process.cwd(), signaturePath.replace(/^\/+/, ""));
+      if (fs.existsSync(signatureFile)) fs.unlinkSync(signatureFile);
+    }
+
+    const updateData = { authority_sign: null, modified_by: req.user.adminID, modified_date: toMysqlDateTime() };
+    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } });
+    await syncToTenant(companyId, async () => {
+      await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } });
+    });
+
+    return successResponse(res, { code: 1003, httpStatus: 200, message: "Authorized signature removed successfully", data: {} });
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+
+const parseStoredLogos = (value) => {
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const deleteCompanyAsset = (companyId, assetPath) => {
+  if (!assetPath) return;
+  const companyDirectory = path.resolve(getCompanyAssetDir(companyId));
+  const absolutePath = path.resolve(process.cwd(), String(assetPath).replace(/^\/+/, ""));
+  if (absolutePath.startsWith(`${companyDirectory}${path.sep}`) && fs.existsSync(absolutePath)) fs.unlinkSync(absolutePath);
+};
+
+export const uploadHappyClientLogos = async (req, res) => {
+  try {
+    const companyId = Number(req.params.id);
+    const files = Array.isArray(req.files) ? req.files.slice(0, 5) : [];
+    if (!companyId || !files.length) return failureResponse(res, { code: 2001, httpStatus: 400, message: "Select at least one client logo" });
+
+    const companies = await CommonModel.getMasterDetails(MODULE_TABLE, "footer_logos", { company_id: companyId });
+    if (!companies.length) return failureResponse(res, { code: 2004, httpStatus: 404, message: "Company not found" });
+
+    const assetDirectory = ensureCompanyAssetDir(companyId);
+    const logos = files.map((file, index) => {
+      const fileName = `client-logo-${index + 1}-${Date.now()}${getLogoExtension(file)}`;
+      fs.writeFileSync(path.join(assetDirectory, fileName), file.buffer);
+      return { name: file.originalname || `Client ${index + 1}`, path: `/images/company/${companyId}/${fileName}` };
+    });
+
+    parseStoredLogos(companies[0].footer_logos).forEach((logo) => deleteCompanyAsset(companyId, logo.path || logo.url));
+    const updateData = { footer_logos: JSON.stringify(logos), modified_by: req.user.adminID, modified_date: toMysqlDateTime() };
+    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } });
+    await syncToTenant(companyId, async () => CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } }));
+
+    return successResponse(res, { code: 1002, httpStatus: 200, message: "Happy client logos uploaded successfully", data: { data: { footer_logos: logos } } });
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
+
+export const removeHappyClientLogos = async (req, res) => {
+  try {
+    const companyId = Number(req.params.id);
+    const companies = await CommonModel.getMasterDetails(MODULE_TABLE, "footer_logos", { company_id: companyId });
+    if (!companies.length) return failureResponse(res, { code: 2004, httpStatus: 404, message: "Company not found" });
+    parseStoredLogos(companies[0].footer_logos).forEach((logo) => deleteCompanyAsset(companyId, logo.path || logo.url));
+    const updateData = { footer_logos: null, modified_by: req.user.adminID, modified_date: toMysqlDateTime() };
+    await CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } });
+    await syncToTenant(companyId, async () => CommonModel.updateMasterDetails({ table: MODULE_TABLE, data: updateData, where: { company_id: companyId } }));
+    return successResponse(res, { code: 1003, httpStatus: 200, message: "Happy client logos removed successfully", data: {} });
+  } catch (error) {
+    return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
+  }
+};
 // ======================================================
 // CREATE / UPDATE / GET SINGLE
 // ======================================================
@@ -443,13 +569,20 @@ export const getCompanyDetails = async (req, res) => {
             message: validation.message,
           });
         }
-
         const data = validation.data;
+
+        if (data.google_review_enabled === "y" && !data.google_review_link?.trim()) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: "Google Review Link is required",
+          });
+        }
+
         delete data.company_id;
         data.created_by = req.user.adminID;
         data.created_date = toMysqlDateTime();
         data.status = data.status || "active";
-
         const result = await CommonModel.saveMasterDetails({
           table: MODULE_TABLE,
           data,
@@ -461,7 +594,6 @@ export const getCompanyDetails = async (req, res) => {
           });
         });
         clearCompanyMailerCache(result.insertId);
-
         return successResponse(res, {
           code: 1001,
           httpStatus: 201,
@@ -470,7 +602,6 @@ export const getCompanyDetails = async (req, res) => {
           },
         });
       }
-
       case "POST": {
         if (!company_id) {
           return failureResponse(res, {
@@ -478,7 +609,6 @@ export const getCompanyDetails = async (req, res) => {
             httpStatus: 404,
           });
         }
-
         const validation = validateBody(req.body, companyValidationRules);
         if (!validation.isValid) {
           return failureResponse(res, {
@@ -489,24 +619,28 @@ export const getCompanyDetails = async (req, res) => {
         }
         const dataforsync = validation.data;
         const data = validation.data;
+        if (data.google_review_enabled === "y" && !data.google_review_link?.trim()) {
+          return failureResponse(res, {
+            code: 2001,
+            httpStatus: 400,
+            message: "Google Review Link is required",
+          });
+        }
 
         delete data.company_id;
         delete data.created_by;
         delete data.created_date;
-
         data.modified_by = req.user.adminID;
         data.modified_date = toMysqlDateTime();
         dataforsync.modified_by = req.user.adminID;
         dataforsync.modified_date = toMysqlDateTime();
         dataforsync.company_id = company_id;
-        console.log('dataforsync : ', dataforsync);
 
         const result = await CommonModel.updateMasterDetails({
           table: MODULE_TABLE,
           data,
           where: { company_id },
         });
-
         await syncToTenant(company_id, async () => {
           const details = await CommonModel.getMasterDetails(MODULE_TABLE, "*", {
             company_id,
@@ -532,7 +666,6 @@ export const getCompanyDetails = async (req, res) => {
           });
         }
         clearCompanyMailerCache(company_id);
-
         return successResponse(res, {
           code: 1002,
           httpStatus: 200,
@@ -667,8 +800,7 @@ export const exportCompanyDb = async (req, res) => {
       fs.unlink(outputFile, () => { });
     });
   } catch (error) {
-    console.log('error : ', error);
-    
+    console.error('error : ', error);
     fs.unlink(outputFile, () => { });
     return res.status(500).json({
       success: false,

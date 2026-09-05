@@ -76,7 +76,7 @@ export const markAsRead = async (req, res) => {
             data: [],
         });
     } catch (error) {
-        console.log(error);
+        console.error(error);
         
         return failureResponse(res, {
             code: 2008,

@@ -149,7 +149,7 @@ export const login = async (req, res) => {
     });
 
   } catch (error) {
-    console.log('error : ', error);
+    console.error('error : ', error);
 
     return failureResponse(res, {
       code: 2008,
@@ -207,7 +207,6 @@ export const forgotPassword = async (req, res) => {
       modified_by: user.adminID,
       modified_date: toMysqlDateTime(),
     });
-    // console.log('sql : ',sql);
     const template = await renderTemplate("forgotPasswordOtp", "email", {
       name: user.name || user.userName || "User",
       otp,

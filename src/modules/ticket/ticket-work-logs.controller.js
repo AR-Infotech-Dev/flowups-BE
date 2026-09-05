@@ -171,9 +171,6 @@ export const create = async (req, res) => {
                 data: ticketUpdateData,
                 where: { ticket_id: ticketId },
             });
-            console.log('ticketId:', ticketId);
-            console.log('ticketUpdateData:', ticketUpdateData);
-            console.log('ticket:', ticket);
 
             await notifyTicketUpdates(ticketId, ticketUpdateData, ticket);
 
@@ -186,7 +183,7 @@ export const create = async (req, res) => {
             },
         });
     } catch (error) {
-        console.log(error);
+        console.error(error);
 
         return failureResponse(res, {
             code: 2008,

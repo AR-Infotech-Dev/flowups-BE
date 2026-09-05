@@ -142,9 +142,27 @@ export const getSummary = async (user = {} , filter = {}) => {
   const overdueTickets = Number(overdueRows[0]?.total || 0);
   const highPriority = Number(highPriorityRows[0]?.total || 0);
   const slaHealth = totalTickets ? Math.max(0, Math.round(((totalTickets - overdueTickets) / totalTickets) * 100)) : 100;
+  const quotationFollowupWhere = ["f.followup_status = 'pending'", "DATE(f.followup_date) <= CURDATE()"];
+  const quotationFollowupParams = [];
+  addCompanyScope(quotationFollowupWhere, quotationFollowupParams, user, "f");
+  if (!isAdminRole(user?.role_slug) && !isSuperAdminRole(user?.role_slug) && user?.adminID) {
+    quotationFollowupWhere.push("f.assigned_to = ?");
+    quotationFollowupParams.push(user.adminID);
+  }
+  const quotationFollowupRows = await query(
+    `SELECT COUNT(*) AS total,
+            SUM(CASE WHEN DATE(f.followup_date) < CURDATE() THEN 1 ELSE 0 END) AS overdue
+     FROM ${DB_PREFIX}quotation_followups f
+     ${getScopedWhereSql(quotationFollowupWhere)}`,
+    quotationFollowupParams,
+  );
+  const quotationFollowupsDue = Number(quotationFollowupRows[0]?.total || 0);
+  const quotationFollowupsOverdue = Number(quotationFollowupRows[0]?.overdue || 0);
+  const quotationFollowupCard = { key: "quotationFollowups", label: "Quotation Follow-ups", value: quotationFollowupsDue, delta: `${quotationFollowupsOverdue} overdue`, tone: quotationFollowupsOverdue ? "red" : "blue", redirectTo: "/quotations" };
 
   if (isAdminRole(user?.role_slug)) {
     return [
+      quotationFollowupCard,
       { key: "tickets", label: "Open Tickets", value: openTickets, delta: `${highPriority} high`, tone: "amber", redirectTo: '/tickets' },
       { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
       { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
@@ -157,6 +175,7 @@ export const getSummary = async (user = {} , filter = {}) => {
   }
   if (isSuperAdminRole(user?.role_slug)) {
     return [
+      quotationFollowupCard,
       { key: "tickets", label: "Open Tickets", value: openTickets, delta: `${highPriority} high`, tone: "amber", redirectTo: '/tickets' },
       { key: "amcActive", label: "AMC Active", value: amcSummary.active, delta: "Protected customers", tone: "green", redirectTo: "/customers?amc=active" },
       { key: "amcExpiring", label: "AMC Expiring", value: amcSummary.expiring, delta: "Next 30 days", tone: "amber", redirectTo: "/customers?amc=expiring" },
@@ -170,6 +189,7 @@ export const getSummary = async (user = {} , filter = {}) => {
   }
 
   return [
+    quotationFollowupCard,
     // { key: "myFollowups", label: "My Follow-ups", value: todayFollowups, delta: "Today", tone: "blue", redirectTo: '/tickets' },
     { key: "myOpen", label: "My Open Tickets", value: openTickets, delta: `${highPriority} high`, tone: "amber", redirectTo: '/tickets' },
     { key: "closed", label: "Closed Tickets", value: closedTickets, delta: "In my scope", tone: "green", redirectTo: '/tickets' },
@@ -227,6 +247,38 @@ export const getAmcSummary = async (user = {} , filter = {}) => {
     expiring: Number(expiringRows[0]?.total || 0),
     expired: Number(expiredRows[0]?.total || 0),
   };
+};
+
+export const getQuotationFollowupAlerts = async (user = {}) => {
+  const where = ["f.followup_status = 'pending'"];
+  const params = [];
+  addCompanyScope(where, params, user, "f");
+
+  if (!isAdminRole(user?.role_slug) && !isSuperAdminRole(user?.role_slug) && user?.adminID) {
+    where.push("f.assigned_to = ?");
+    params.push(user.adminID);
+  }
+
+  return query(
+    `SELECT f.followup_id, f.quotation_id, f.followup_date, f.followup_type,
+            f.notes, f.assigned_to, q.quotation_no,
+            COALESCE(c.name, l.name, '-') AS party_name,
+            a.name AS assigned_to_name,
+            CASE
+              WHEN DATE(f.followup_date) < CURDATE() THEN 'overdue'
+              WHEN DATE(f.followup_date) = CURDATE() THEN 'today'
+              ELSE 'upcoming'
+            END AS due_state
+     FROM ${DB_PREFIX}quotation_followups f
+     INNER JOIN ${DB_PREFIX}quotations q ON q.quotation_id = f.quotation_id
+     LEFT JOIN ${DB_PREFIX}customer c ON c.customer_id = f.customer_id
+     LEFT JOIN ${DB_PREFIX}leads l ON l.lead_id = f.lead_id
+     LEFT JOIN ${DB_PREFIX}admin a ON a.adminID = f.assigned_to
+     ${getScopedWhereSql(where)}
+     ORDER BY CASE WHEN f.followup_date < NOW() THEN 0 ELSE 1 END, f.followup_date ASC
+     LIMIT 10`,
+    params,
+  );
 };
 export const getAmcHealth = async (user = {} , filter = {}) => {
   const data = await getAmcSummary(user, filter);
@@ -421,7 +473,7 @@ export const getProductExpiryAlerts = async (user = {} , filter = {}) => {
     .slice(0, 10);
 };
 export const getDashboardOverview = async (user = {}, filter={}) => {
-  const [summary, amcSummary, amcHealth, ticketStatus, ticketTrend, workload, recentActivity, amcAlerts, productExpiryAlerts] = await Promise.all([
+  const [summary, amcSummary, amcHealth, ticketStatus, ticketTrend, workload, recentActivity, amcAlerts, productExpiryAlerts, quotationFollowups] = await Promise.all([
     getSummary(user, filter),
     getAmcSummary(user,filter),
     getAmcHealth(user, filter),
@@ -431,6 +483,7 @@ export const getDashboardOverview = async (user = {}, filter={}) => {
     getRecentActivity(user, filter),
     getAmcAlerts(user, filter),
     getProductExpiryAlerts(user, filter),
+    getQuotationFollowupAlerts(user),
   ]);
 
   return {
@@ -446,5 +499,6 @@ export const getDashboardOverview = async (user = {}, filter={}) => {
     recentActivity,
     amcAlerts,
     productExpiryAlerts,
+    quotationFollowups,
   };
 };

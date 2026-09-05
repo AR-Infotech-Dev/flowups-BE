@@ -202,7 +202,7 @@ const default_columns = {
     key2: "roleID",
     select: "",
   },
-  default_company: {
+  company_id: {
     table: "company_master",
     alias: "dc",
     column: "company_name",
@@ -871,7 +871,7 @@ export const getMarkers = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, {
       code: 2008,
       httpStatus: 500,

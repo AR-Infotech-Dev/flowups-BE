@@ -101,7 +101,7 @@ export const emitNotification = (userId = null, data = {}) => {
     const io = getIO();
     io.to(`user_${userId}`).emit("new_notification", data);
   } catch (error) {
-    console.log("Socket Error :", error.message);
+    console.error("Socket Error :", error.message);
   }
 };
 
@@ -143,7 +143,6 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
     text: "",
     company_id: details.company_id || null,
   });
-  console.log("is Email sent : ",result);
   
   return result?.success
     ? { success: true }

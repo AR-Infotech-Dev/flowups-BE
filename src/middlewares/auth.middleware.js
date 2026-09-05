@@ -24,7 +24,7 @@ import { getActiveSessionId } from "#shared/utils/activeSession.js";
 //         next();
 
 //     } catch (error) {
-//         console.log(error);
+//         console.error(error);
 //         return failureResponse(res, {
 //             code: 2007,
 //             httpStatus: 401,
@@ -61,7 +61,7 @@ export const verifyToken = async (req, res, next) => {
       });
     }
 
-    const activeSessionId = await getActiveSessionId(decoded.adminID,isMobile);
+    const activeSessionId = await getActiveSessionId(decoded.adminID, isMobile);
     if (!activeSessionId || activeSessionId !== decoded.active_session_id) {
       return failureResponse(res, {
         code: 2009,
@@ -74,7 +74,7 @@ export const verifyToken = async (req, res, next) => {
 
     return next();
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, {
       code: 2007,
       httpStatus: 401,

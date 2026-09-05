@@ -78,19 +78,11 @@ const getCustomerwiseTickets = async ({ companyId, body, isExport = false, }) =>
         COALESCE(SUM(CASE WHEN t.ticket_status = 205 THEN 1 ELSE 0 END),0) AS open_tickets,
         COALESCE(SUM(CASE WHEN t.ticket_status IN (206,210) THEN 1 ELSE 0 END),0) AS in_progress_tickets,
         COALESCE(SUM(CASE WHEN t.ticket_status = ? THEN 1 ELSE 0 END),0) AS closed_tickets,
-        COALESCE(SUM(
-            CASE
-                WHEN t.ticket_id IS NOT NULL
-                AND t.due_date < CURRENT_DATE
-                AND t.ticket_status <> ?
-                THEN 1
-                ELSE 0
-            END
-        ),0) AS overdue_tickets
+        COALESCE(SUM( CASE WHEN t.ticket_id IS NOT NULL AND t.due_date < CURRENT_DATE AND t.ticket_status <> ? THEN 1 ELSE 0 END ),0) AS overdue_tickets
       FROM ${DB_PREFIX}customer c
       LEFT JOIN ${DB_PREFIX}tickets t
       ON ${joinSql}
-      WHERE ${whereSql}
+      WHERE ${whereSql} 
       `,
     [CLOSED_STATUS, CLOSED_STATUS, ...ticketValues, ...customerValues]
   ),
@@ -108,15 +100,7 @@ const getCustomerwiseTickets = async ({ companyId, body, isExport = false, }) =>
           COALESCE(SUM(CASE WHEN t.ticket_status=205 THEN 1 ELSE 0 END),0) open_tickets,
           COALESCE(SUM(CASE WHEN t.ticket_status IN (206,210) THEN 1 ELSE 0 END),0) in_progress_tickets,
           COALESCE(SUM(CASE WHEN t.ticket_status=? THEN 1 ELSE 0 END),0) closed_tickets,
-          COALESCE(SUM(
-              CASE
-                  WHEN t.ticket_id IS NOT NULL
-                  AND t.due_date<CURRENT_DATE
-                  AND t.ticket_status<>?
-                  THEN 1
-                  ELSE 0
-              END
-          ),0) overdue_tickets,
+          COALESCE(SUM( CASE WHEN t.ticket_id IS NOT NULL AND t.due_date<CURRENT_DATE AND t.ticket_status<>? THEN 1 ELSE 0 END ),0) overdue_tickets,
           MAX(t.created_date) last_ticket_date,
           SUBSTRING_INDEX(
               GROUP_CONCAT(t.ticket_no ORDER BY t.created_date DESC,t.ticket_id DESC),
@@ -174,7 +158,6 @@ export const companyCustomerTicketReport = async (req, res) => {
     const companyId = !isSuperAdmin(req.user)
       ? req.user.company_id
       : body.company_id;
-    console.log('companyId : ', companyId);
 
     if (!companyId) {
       return failureResponse(res, {
@@ -216,11 +199,10 @@ export const exportCustomerwiseReportExcel = async (req, res) => {
       });
     }
     const {company, customers, filters, summary} = await getCustomerwiseTickets({ companyId, body, isExport: true, });
-    console.log({company, customers, filters, summary});
     const attachment = await buildCustomerWiseExcelAttachment({ company, customers, filters, summary });
     return sendExcelDownload(res, attachment);
   } catch (error) {
-    console.log(error);
+    console.error(error);
     return failureResponse(res, { code: 2008, httpStatus: 500, message: error.message });
   }
 };
