@@ -122,16 +122,19 @@ export const sendEmailToClient = async (ticketId, subject = "", message = "", re
       company_id: details.company_id,
     }
   );
+ const isClosedTicket =
+  String(details.ticket_status || "").toLowerCase() === "closed";
 
-  const googleReviewEnabled =
-    company.length > 0 &&
-    company[0].google_review_enabled === "y" &&
-    !!company[0].google_review_link?.trim();
+const googleReviewEnabled =
+  isClosedTicket &&
+  company.length > 0 &&
+  company[0].google_review_enabled === "y" &&
+  !!company[0].google_review_link?.trim();
 
-  const googleReviewUrl =
-    company.length > 0
-      ? company[0].google_review_link || ""
-      : "";
+const googleReviewUrl =
+  isClosedTicket && company.length > 0
+    ? company[0].google_review_link || ""
+    : "";
 
   if (!details.email || details.email.trim() === "") {
     return { success: false, message: "Client email not found" };

@@ -22,8 +22,6 @@ const getUserwiseTickets = async ({
 
   const searchText = String(body.searchText || "").trim();
 
-  // USER WHERE
-
   const userWhere = [
     "u.company_id = ?",
   ];
@@ -40,9 +38,6 @@ const getUserwiseTickets = async ({
     userValues.push(value, value, value);
   }
 
-  // --------------------------------------------------
-  // TICKET JOIN
-  // --------------------------------------------------
   const ticketJoin = [
     "t.assignee = u.adminID",
     "t.status = 'active'",
@@ -75,9 +70,7 @@ const getUserwiseTickets = async ({
     summaryRows,
     userRows,
   ] = await Promise.all([
-
-    // COMPANY
-    
+   
     query(
       `
         SELECT
@@ -89,8 +82,6 @@ const getUserwiseTickets = async ({
       `,
       [companyId]
     ),
-
-   // USER COUNT
    
     query(
       `
@@ -100,9 +91,7 @@ const getUserwiseTickets = async ({
       `,
       userValues
     ),
-
-    // SUMMARY
-  
+ 
     query(
       `
         SELECT
@@ -185,9 +174,6 @@ const getUserwiseTickets = async ({
       ]
     ),
 
-    // -----------------------------------------------
-    // USER LIST
-    // -----------------------------------------------
     query(
       `
         SELECT
@@ -294,9 +280,6 @@ const getUserwiseTickets = async ({
       ]
     ),
   ]);
-  console.log("🔥 USER ROWS:", userRows);
-  console.log("🔥 COUNT ROWS:", countRows);
-  console.log("🔥 SUMMARY ROWS:", summaryRows);
   const total = Number(countRows[0]?.total || 0);
   const usersWithSummary = await Promise.all(
     userRows.map(async (userRow) => {
@@ -342,7 +325,6 @@ const getUserwiseTickets = async ({
         total,
       })
       : {},
-
     filters: {
       company_id: String(companyId),
       from_date: body.from_date || "",
